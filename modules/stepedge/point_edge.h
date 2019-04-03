@@ -87,7 +87,8 @@ typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
 typedef Neighbor_search::Tree Tree;
 
 // least squares stuff
-typedef CGAL::Simple_cartesian<double> SCK;
+// typedef CGAL::Simple_cartesian<double> SCK;
+typedef CGAL::Cartesian<double> SCK;
 typedef SCK::Point_3 Point_SCK;
 typedef SCK::Line_3 Line_SCK;
 
@@ -110,7 +111,7 @@ struct FaceInfo {
   bool in_footprint=false;
   float elevation_avg=0;
   float elevation_min, elevation_max;
-  size_t segid=0;
+  int segid=0;
   float segid_coverage;
   float segid_count;
   PNL_vector points;
@@ -119,10 +120,7 @@ struct FaceInfo {
   float total_count;
 };
 struct EdgeInfo {
-  bool is_touched=false;
-  bool is_footprint=false;
-  Kernel::Point_2 c;
-  double halfdist_sq;
+  bool blocks = false;
 };
 typedef CGAL::Arr_extended_dcel<Traits_2, bool, EdgeInfo, FaceInfo>   Dcel;
 typedef CGAL::Arrangement_2<Traits_2, Dcel>           Arrangement_2;
@@ -132,20 +130,32 @@ typedef Arrangement_2::Face_handle                    Face_handle;
 typedef Arrangement_2::Vertex_const_handle            Vertex_const_handle;
 typedef Arrangement_2::Halfedge_const_handle          Halfedge_const_handle;
 typedef Arrangement_2::Face_const_handle              Face_const_handle;
+typedef Arrangement_2::Ccb_halfedge_circulator        Ccb_halfedge_circulator;
 typedef CGAL::Arr_accessor<Arrangement_2>             Arr_accessor;
 typedef Arr_accessor::Dcel_vertex                     DVertex;
 typedef Arrangement_2::Face                           Face;
 struct overlay_functor {
   FaceInfo operator()(const FaceInfo a, const FaceInfo b) const { 
     auto r = FaceInfo();
+    r.segid=0;
     // if (a.is_finite && b.is_finite)
     r.is_finite = true;
-    if (a.segid!=0 && b.segid==0)
+
+    if (a.segid!=0 && b.segid==0) {
       r.segid = a.segid;
-    else if (a.segid==0 && b.segid!=0)
+      r.elevation_avg = a.elevation_avg;
+    } else if (a.segid==0 && b.segid!=0) {
       r.segid = b.segid;
-    else if (a.segid!=0 && b.segid!=0)
-      r.segid = 999;
+      r.elevation_avg = b.elevation_avg;
+    } else if (a.segid!=0 && b.segid!=0) { // we need to merge 2 faces with a plane
+      if (a.elevation_avg > b.elevation_avg) {
+        r.elevation_avg = a.elevation_avg;
+        r.segid = a.segid;
+      } else {
+        r.elevation_avg = b.elevation_avg;
+        r.segid = b.segid;
+      }
+    }
 
     if (a.in_footprint || b.in_footprint) {
       r.in_footprint = true;
@@ -169,30 +179,26 @@ class Face_index_observer : public CGAL::Arr_observer<Arrangement_2>
 {
 private:
   int     n_faces;          // The current number of faces.
-  int     plane_id;
+  size_t  plane_id;
   bool    in_footprint;
+  float   elevation=0;
 public:
-  Face_index_observer (Arrangement_2& arr, bool is_footprint) :
+  Face_index_observer (Arrangement_2& arr, bool is_footprint, size_t pid, float elevation) :
     CGAL::Arr_observer<Arrangement_2> (arr),
-    n_faces (0), in_footprint(is_footprint)
+    n_faces (0), in_footprint(is_footprint), plane_id(pid), elevation(elevation)
   {
     CGAL_precondition (arr.is_empty());
     arr.unbounded_face()->data().is_finite=false;
     n_faces++;
   };
-  void set_plane_id(int pid) { plane_id=pid; };
   virtual void after_split_face (Face_handle old_face,
                                  Face_handle new_face, bool )
   {
     // Assign index to the new face.
     new_face->data().in_footprint = in_footprint;
-    if(n_faces == 1) {
-      new_face->data().is_finite = true;
-    } else if(old_face->data().is_finite) {
-      new_face->data().is_finite = true;
-      new_face->data().segid = plane_id;
-    } else
-      new_face->data().is_finite = false;
+    new_face->data().is_finite = true;
+    new_face->data().segid = plane_id;
+    new_face->data().elevation_avg = elevation;
     n_faces++;
   }
 };
@@ -246,6 +252,21 @@ class Face_merge_observer : public CGAL::Arr_observer<Arrangement_2>
       return;
     }
     remaining_face->data().points.insert(remaining_face->data().points.end(), discarded_face->data().points.begin(), discarded_face->data().points.end() );
+  }
+};
+
+class Snap_observer : public CGAL::Arr_observer<Arrangement_2>
+{ 
+  public:
+  Snap_observer (Arrangement_2& arr) :
+    CGAL::Arr_observer<Arrangement_2> (arr) {};
+
+  virtual void 	after_create_edge (Halfedge_handle e) {
+    e->data().blocks = true;
+  }
+  virtual void after_split_face (Face_handle old_face, Face_handle new_face, bool ) {
+    if (old_face->data().segid==0)
+      new_face->set_data(old_face->data());
   }
 };
 

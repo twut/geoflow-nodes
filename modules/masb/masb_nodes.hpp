@@ -13,12 +13,12 @@ namespace geoflow::nodes::mat {
     double zero=0,pi=3.14;
     using Node::Node;
     void init() {
-      add_input("points", TT_point_collection);
-      add_input("normals", TT_vec3f);
-      add_output("ma_coords", TT_point_collection);
-      add_output("ma_radii", TT_vec1f);
-      add_output("ma_qidx", TT_vec1i);
-      add_output("ma_is_interior", TT_vec1i);
+      add_input("points", typeid(PointCollection));
+      add_input("normals", typeid(vec3f));
+      add_output("ma_coords", typeid(PointCollection));
+      add_output("ma_radii", typeid(vec1f));
+      add_output("ma_qidx", typeid(vec1i));
+      add_output("ma_is_interior", typeid(vec1i));
     }
     void gui(){
       ImGui::SliderFloat("initial_radius", &params.initial_radius, 0, 1000);
@@ -28,6 +28,18 @@ namespace geoflow::nodes::mat {
     }
     void process();
   };
+  class MATfilter :public Node {
+  public:
+      using Node::Node;
+      void init() {
+          add_input("ma_coords", typeid(PointCollection));
+          add_input("ma_is_interior", typeid(vec1i));
+          add_output("interior_mat", typeid(PointCollection));
+          add_output("exterior_mat", typeid(PointCollection));
+      }
+      void process();
+
+  };
 
   class ComputeNormalsNode:public Node {
     public:
@@ -35,8 +47,8 @@ namespace geoflow::nodes::mat {
     float interval = 2;
     using Node::Node;
     void init() {
-      add_input("points", TT_point_collection);
-      add_output("normals", TT_vec3f);
+      add_input("points", typeid(PointCollection));
+      add_output("normals", typeid(vec3f));
     }
     void gui(){
       ImGui::SliderInt("K", &params.k, 1, 100);
@@ -48,8 +60,8 @@ namespace geoflow::nodes::mat {
       char filepath[256] = "";
       using Node::Node;
       void init() {
-          add_input("in_radii", TT_vec1f);
-          add_output("out_radii", TT_vec1f);
+          add_input("in_radii", typeid(vec1f));
+          add_output("out_radii", typeid(vec1f));
 
       }
       void gui() {
@@ -90,8 +102,8 @@ namespace geoflow::nodes::mat {
       }
 
       void init() {
-          add_input("points", TT_point_collection);
-          add_output("KDTree", TT_KDTree);
+          add_input("points", typeid(PointCollection));
+          add_output("KDTree", typeid(KdTree));
          
 
       }
@@ -107,11 +119,11 @@ namespace geoflow::nodes::mat {
 
       void init() {
           //add_input("viewpoint", TT_vec1f);
-          add_input("KDTree", TT_KDTree);
-          add_input("MATpoints", TT_point_collection);
-          add_input("Number", TT_float);
-          add_input("ViewPoint", TT_Vector3D);
-          add_output("Points", TT_point_collection);
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("Number", typeid(float));
+          add_input("ViewPoint", typeid(Vector3D));
+          add_output("Points", typeid(PointCollection));
           //add_output("result_points", TT_point_collection);
 
       }
@@ -124,13 +136,13 @@ namespace geoflow::nodes::mat {
 
       void init() {
           //add_input("viewpoint", TT_vec1f);
-          add_input("KDTree", TT_KDTree);
-          add_input("MATpoints", TT_point_collection);
-          add_input("Vector1", TT_Vector3D);
-          add_input("Vector2", TT_Vector3D);
-          add_input("Number", TT_float);
-          add_input("Distance", TT_float);
-          add_output("Points", TT_point_collection);
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("Vector1", typeid(Vector3D));
+          add_input("Vector2", typeid(Vector3D));
+          add_input("Number", typeid(float));
+          add_input("Distance", typeid(float));
+          add_output("Points", typeid(PointCollection));
           //add_output("result_points", TT_point_collection);
 
       }
@@ -141,7 +153,7 @@ namespace geoflow::nodes::mat {
       using Node::Node;
 
       void init() {
-          add_output("result", TT_float);
+          add_output("result", typeid(float));
           add_param("number_value", (int)5);
       }
 
@@ -158,7 +170,7 @@ namespace geoflow::nodes::mat {
       using Node::Node;
 
       void init() {
-          add_output("result", TT_Vector3D);
+          add_output("result", typeid(Vector3D));
 
           add_param("x_value", (float)-99.0594);
           add_param("y_value", (float)-90.828);
@@ -180,6 +192,7 @@ namespace geoflow::nodes::mat {
           
       }
   };
+  
 
 
 

@@ -66,6 +66,23 @@ namespace geoflow::nodes::mat {
         output("ma_is_interior").set(ma_is_interior);
     }
 
+    void MATfilter::process() {
+        auto matpoints = input("ma_coords").get<PointCollection>();
+        auto in_index = input("ma_is_interior").get<vec1i>();
+        int size = matpoints.size();
+        PointCollection in_mat,ex_mat;
+        in_mat.reserve(size*0.5);
+        ex_mat.reserve(size*0.5);
+        for (int i = 0; i < size;i++) {
+            if (in_index[i] == 1)
+            {
+                in_mat.push_back(matpoints[i]);
+            }
+            else ex_mat.push_back(matpoints[i]);
+        }
+        output("interior_mat").set(in_mat);
+        output("exterior_mat").set(ex_mat);
+    }
 
     void ComputeNormalsNode::process() {
         auto point_collection = input("points").get<PointCollection>();
@@ -217,5 +234,6 @@ namespace geoflow::nodes::mat {
         output("Points").set(resultPoints);    
         outfile.close();
     }
+
 
 }
