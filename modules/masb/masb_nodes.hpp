@@ -34,8 +34,9 @@ namespace geoflow::nodes::mat {
       void init() {
           add_input("ma_coords", typeid(PointCollection));
           add_input("ma_is_interior", typeid(vec1i));
+          add_input("ma_radii", typeid(vec1f));
           add_output("interior_mat", typeid(PointCollection));
-          add_output("exterior_mat", typeid(PointCollection));
+          add_output("interior_radii", typeid(vec1f));
       }
       void process();
 
@@ -111,6 +112,30 @@ namespace geoflow::nodes::mat {
 
       }
       void process();
+  };
+  class VisibiltyQurey :public Node 
+  {
+  public: 
+      using Node::Node;
+      void init() {
+          add_input("KDTree", typeid(KdTree));
+          add_input("interior_MAT", typeid(PointCollection));
+          add_input("ViewPoint", typeid(Vector3D));
+          add_input("interior_radii", typeid(vec1f));
+          add_output("Visible_MAT", typeid(PointCollection));
+          add_output("Radii_of_MAT", typeid(vec1f));
+      }
+      void process();
+      float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
+      {
+          float ab = sqrt(pow((a.x - b.x), 2.0) + pow((a.y - b.y), 2.0) + pow((a.z - b.z), 2.0));
+          float as = sqrt(pow((a.x - s.x), 2.0) + pow((a.y - s.y), 2.0) + pow((a.z - s.z), 2.0));
+          float bs = sqrt(pow((s.x - b.x), 2.0) + pow((s.y - b.y), 2.0) + pow((s.z - b.z), 2.0));
+          float cos_A = (pow(as, 2.0) + pow(ab, 2.0) - pow(bs, 2.0)) / (2 * ab*as);
+          float sin_A = sqrt(1 - pow(cos_A, 2.0));
+          return as * sin_A;
+      }
+
   };
   class KDTreeNearestQurey:public Node{
   public:

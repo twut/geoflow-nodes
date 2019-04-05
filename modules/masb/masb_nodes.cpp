@@ -51,9 +51,11 @@ namespace geoflow::nodes::mat {
 
 
         //----- radii -----------------//
-        vec1f ma_radii(madata.m * 2);
+        vec1f ma_radii;
+        ma_radii.reserve(madata.m * 2);
         for (size_t i = 0; i < madata.m * 2; ++i) {
-            ma_radii.push_back(Vrui::Geometry::dist(coords[i%madata.m], ma_coords_[i]));
+            double r = Vrui::Geometry::dist(coords[i%madata.m], ma_coords_[i]);            
+            ma_radii.push_back(r);
         }
 
 
@@ -67,21 +69,39 @@ namespace geoflow::nodes::mat {
     }
 
     void MATfilter::process() {
+        std::cout << "Filter running" << std::endl;
         auto matpoints = input("ma_coords").get<PointCollection>();
-        auto in_index = input("ma_is_interior").get<vec1i>();
-        int size = matpoints.size();
-        PointCollection in_mat,ex_mat;
-        in_mat.reserve(size*0.5);
-        ex_mat.reserve(size*0.5);
-        for (int i = 0; i < size;i++) {
-            if (in_index[i] == 1)
-            {
-                in_mat.push_back(matpoints[i]);
-            }
-            else ex_mat.push_back(matpoints[i]);
+        auto interior_index = input("ma_is_interior").get<vec1i>();
+        auto ma_radii = input("ma_radii").get<vec1f>();
+        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\radii_out.txt";
+        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+        for (float a : ma_radii) 
+        {
+            outfile << a << std::endl;
         }
-        output("interior_mat").set(in_mat);
-        output("exterior_mat").set(ex_mat);
+        outfile.close();
+
+        int size = matpoints.size();
+        //-----output-----------------//
+        PointCollection interior_mat;
+        vec1f  interior_radii;
+
+        std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\filtered_radii_out.txt";
+        std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
+
+        for (int i = 0; i < size; i++) {
+            if (interior_index[i] == 1 && ma_radii[i] < 199)
+            {
+                interior_mat.push_back(matpoints[i]);
+                interior_radii.push_back(ma_radii[i]);
+                outfile2 << ma_radii[i] << std::endl;
+            }
+        }
+
+        outfile2.close();
+        std::cout << "Filter node message:" << interior_mat.size() << std::endl;
+        output("interior_mat").set(interior_mat);
+        output("interior_radii").set(interior_radii);
     }
 
     void ComputeNormalsNode::process() {
@@ -206,11 +226,12 @@ namespace geoflow::nodes::mat {
         std::cout << "KDtree nearest query results done." << std::endl;
     }
     void KDTreeLineQurey::process() {
+
         std::cout << "Line qurey starting" << std::endl;
         //---------------Input Data--------------
         int number = int(input("Number").get<float>());
         float distance = input("Distance").get<float>();
-        
+
         Vector3D v1 = input("Vector1").get<Vector3D>();
         Vector3D v2 = input("Vector2").get<Vector3D>();
         auto kdtree = input("KDTree").get<KdTree*>();
@@ -231,9 +252,58 @@ namespace geoflow::nodes::mat {
             resultPoints.push_back({ MATpoints[index][0], MATpoints[index][1] ,MATpoints[index][2] });
             outfile << MATpoints[index][0] << "," << MATpoints[index][1] << "," << MATpoints[index][2] << std::endl;
         }
-        output("Points").set(resultPoints);    
+        output("Points").set(resultPoints);
         outfile.close();
     }
+
+    void VisibiltyQurey::process() {
+        std::cout << "Visibility Qurey start" << std::endl;
+        //----------------input----------------//
+        Vector3D viewpoint = input("ViewPoint").get<Vector3D>();
+        auto kdtree = input("KDTree").get<KdTree*>();
+        auto interior_mat = input("interior_MAT").get<PointCollection>();
+        auto interior_radii = input("interior_radii").get<vec1f>();
+        //-----------output-------------------//
+        PointCollection visible_mat;
+        vec1f visible_radii;
+
+        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Visible_MAT_out.txt";
+        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+        
+
+        for (int i = 0; i < interior_mat.size(); i++) {
+            bool visibility = true;
+            Vector3D target = { interior_mat[i][0], interior_mat[i][1],interior_mat[i][2] };
+            (*kdtree).queryLineIntersection(viewpoint, target, 200, 1, 1);
+            int number = (*kdtree).getNOfFoundNeighbours();
+            for (int j = 0; j < number; j++)
+            {
+                int index = (*kdtree).getNeighbourPositionIndex(j);
+
+                Vector3D s = { interior_mat[index][0],interior_mat[index][1],interior_mat[index][2] };
+                float dis = VisibiltyQurey::DistanceOfPointToLine(viewpoint, target, s);                
+                if (dis <= interior_radii[index])
+                {
+                    visibility = false;
+                    break;
+                }
+            }
+            if (visibility == false)
+            {
+                continue;
+            }
+
+            visible_mat.push_back({ interior_mat[i][0], interior_mat[i][1],interior_mat[i][2] });
+            visible_radii.push_back(interior_radii[i]);
+            outfile << interior_mat[i][0] << "," << interior_mat[i][1] << "," << interior_mat[i][2] << "," << interior_radii[i] << std::endl;
+        }
+        outfile.close();
+        output("Visible_MAT").set(visible_mat);
+        output("Radii_of_MAT").set(visible_radii);
+        std::cout << "Visiblity Qurey Done" << std::endl;
+    }
+    
+    
 
 
 }
