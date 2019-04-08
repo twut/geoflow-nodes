@@ -3,6 +3,7 @@
 #include <compute_ma_processing.h>
 #include <compute_normals_processing.h>
 
+
 namespace geoflow::nodes::mat {
 
 
@@ -195,7 +196,8 @@ namespace geoflow::nodes::mat {
       using Node::Node;
 
       void init() {
-          add_output("result", typeid(Vector3D));
+          add_output("vector", typeid(Vector3D));
+          add_output("point", typeid(PointCollection));
 
           add_param("x_value", (float)-99.0594);
           add_param("y_value", (float)-90.828);
@@ -213,9 +215,68 @@ namespace geoflow::nodes::mat {
           float y = param<float>("y_value");
           float z = param<float>("z_value");
           Vector3D viewpoint = {x,y,z};
-          output("result").set(viewpoint);
+
+          PointCollection point;          
+          point.push_back({ x, y, z });
+                    
+          output("vector").set(viewpoint);
+          output("point").set(point);
           
       }
+  };
+  class TriangleNode :public Node {
+  public:
+      using Node::Node;
+      void init() {
+          add_output("triangle_collection", typeid(TriangleCollection));
+          add_output("normals", typeid(vec3f));
+      }
+      void gui() {
+      }
+      
+      void process() {
+          typedef std::array<float, 3> point;
+          point p0 = { -1.0f, -1.0f, -1.0f };
+          point p1 = { 1.0f, -1.0f, -1.0f };
+          point p2 = { 1.0f, 1.0f, -1.0f };
+          point p3 = { -1.0f, 1.0f, -1.0f };
+
+          point p4 = { -1.0f, -1.0f, 1.0f };
+          point p5 = { 1.0f, -1.0f, 1.0f };
+          point p6 = { 1.0f, 1.0f, 1.0f };
+          point p7 = { -1.0f, 1.0f, 1.0f };
+
+          TriangleCollection tc;
+          tc.push_back({ p2,p1,p0 });
+          tc.push_back({ p0,p3,p2 });
+          tc.push_back({ p4,p5,p6 });
+          tc.push_back({ p6,p7,p4 });
+          tc.push_back({ p0,p1,p5 });
+          tc.push_back({ p5,p4,p0 });
+          tc.push_back({ p1,p2,p6 });
+          tc.push_back({ p6,p5,p1 });
+          tc.push_back({ p2,p3,p7 });
+          tc.push_back({ p7,p6,p2 });
+          tc.push_back({ p3,p0,p4 });
+          tc.push_back({ p4,p7,p3 });
+
+          vec3f normals;
+          //counter-clockwise winding order
+          for (auto& t : tc) {
+              masb::Vector a = (t[0].data());
+              masb::Vector b = (t[1].data());
+              masb::Vector c = (t[2].data());
+              //auto v1 = b - a;
+              auto n = Vrui::Geometry::cross(b - a, c - b);
+
+              normals.push_back({ n[0],n[1],n[2] });
+              normals.push_back({ n[0],n[1],n[2] });
+              normals.push_back({ n[0],n[1],n[2] });
+          }
+          output("triangle_collection").set(tc);
+          output("normals").set(normals);
+      }
+
   };
   
 

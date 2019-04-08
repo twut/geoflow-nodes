@@ -265,6 +265,7 @@ namespace geoflow::nodes::mat {
         auto interior_radii = input("interior_radii").get<vec1f>();
         //-----------output-------------------//
         PointCollection visible_mat;
+
         vec1f visible_radii;
 
         std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Visible_MAT_out.txt";
