@@ -275,7 +275,7 @@ namespace geoflow::nodes::mat {
         for (int i = 0; i < interior_mat.size(); i++) {
             bool visibility = true;
             Vector3D target = { interior_mat[i][0], interior_mat[i][1],interior_mat[i][2] };
-            (*kdtree).queryLineIntersection(viewpoint, target, 200, 1, 1);
+            (*kdtree).queryLineIntersection(viewpoint, target, 10, 1, 1);
             int number = (*kdtree).getNOfFoundNeighbours();
             for (int j = 0; j < number; j++)
             {
@@ -303,7 +303,7 @@ namespace geoflow::nodes::mat {
         output("Radii_of_MAT").set(visible_radii);
         std::cout << "Visiblity Qurey Done" << std::endl;
     }
-    
+ 
     
 
 

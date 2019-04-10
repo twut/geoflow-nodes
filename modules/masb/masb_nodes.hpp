@@ -4,6 +4,9 @@
 #include <compute_normals_processing.h>
 
 
+# define M_PI           3.14159265358979323846 
+
+
 namespace geoflow::nodes::mat {
 
 
@@ -224,8 +227,92 @@ namespace geoflow::nodes::mat {
           
       }
   };
+  class Triangulation :public Node {
+  public:
+      using Node::Node;
+      TriangleCollection *mp_tc = nullptr;
+      vec3f *mp_normals = nullptr;
+      
+
+      void init() {
+          add_input("MAT_points", typeid(PointCollection));
+          add_input("radii",typeid(vec1f));
+          add_output("triangle_collection", typeid(TriangleCollection));
+          add_output("normals", typeid(vec3f));
+      }
+      void gui() {}
+      void process()
+      {
+          auto mat_points = input("MAT_points").get<PointCollection>();
+          auto radii = input("radii").get<vec1f>();
+          TriangleCollection all_tc;
+          vec3f all_normals;
+
+          for (int i = 0; i < mat_points.size(); i++) {
+              std::cout << "index i: " <<i<< std::endl;
+              auto  tc= Triangulation::StandardSphere(mat_points[i], radii[i]);
+              for (auto a : tc) {
+                  all_tc.push_back(a);
+              }                  
+          }
+          all_normals = ComputeNormals(all_tc);
+
+          std::cout << "Triangulation Done" << std::endl;
+          output("triangle_collection").set(all_tc);
+          output("normals").set(all_normals);
+      };
+      
+      geoflow::TriangleCollection StandardSphere(geoflow::arr3f center, float radius) {
+          geoflow::Triangle t1,t2;
+          geoflow::TriangleCollection tc;
+          int Density = 10;
+          std::array<float, 3> points[11][21];
+          std::cout << "start triangulation" << std::endl;
+          std::cout << "debug test" << std::endl;
+          for (int t = 0; t <= Density; t++)
+          {
+              double vt = t * (M_PI / Density);
+              for (int n = 0; n <= Density*2; n++) {
+                  double vp = (n - Density) * (M_PI / Density);
+                  points[t][n][0] = std::sin(vt)*std::cos(vp)*radius + center[0];
+                  points[t][n][1] = std::sin(vt)*std::sin(vp)*radius + center[1];
+                  points[t][n][2] = std::cos(vt)*radius + center[2];
+                  //std::cout << "points:" << points[t][n][0] << "," << points[t][n][1] << "," << points[t][n][2] << std::endl;
+              }
+          }
+          for (int nt = 1; nt <= Density; nt++) {
+              for (int np = 0; np <= (2*Density-1); np++) {
+                  tc.push_back({ points[nt][np],points[nt][np + 1],points[nt - 1][np] });
+                  //(*mp_normals).push_back({ points[nt][np][0],points[nt][np][1],points[nt][np][2] });
+
+                  tc.push_back ({ points[nt][np + 1],points[nt - 1][np + 1],points[nt - 1][np] });
+                  //(*mp_normals).push_back({ points[nt][np][0],points[nt][np][1],points[nt][np][2] });
+                
+              }
+          }
+          std::cout << "size of tc:" << tc.size() << std::endl;
+          return tc;          
+      }
+      vec3f ComputeNormals(geoflow::TriangleCollection tc) {
+          vec3f normals;
+          for (auto& t : tc) {
+              masb::Vector a = (t[0].data());
+              masb::Vector b = (t[1].data());
+              masb::Vector c = (t[2].data());
+              //auto v1 = b - a;
+              auto n = Vrui::Geometry::cross(b - a, c - b);
+
+              normals.push_back({ n[0],n[1],n[2] });
+              normals.push_back({ n[0],n[1],n[2] });
+              normals.push_back({ n[0],n[1],n[2] });
+          }
+          return normals;
+      
+      }
+  };
   class TriangleNode :public Node {
   public:
+
       using Node::Node;
       void init() {
           add_output("triangle_collection", typeid(TriangleCollection));
