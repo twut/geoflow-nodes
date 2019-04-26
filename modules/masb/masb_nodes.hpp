@@ -62,19 +62,47 @@ namespace geoflow::nodes::mat {
   };
   class testNode :public Node {
   public:
-      char filepath[256] = "";
+      
       using Node::Node;
       void init() {
-          add_input("in_radii", typeid(vec1f));
-          add_output("out_radii", typeid(vec1f));
+          add_input("KDTree1", typeid(arr3f));
+          add_input("KDTree2", typeid(arr3f));
+          //add_output("out_radii", typeid(vec1f));
 
       }
       void gui() {
-          ImGui::InputText("File path", filepath, IM_ARRAYSIZE(filepath));
+          //ImGui::InputText("File path", filepath, IM_ARRAYSIZE(filepath));
     
       }
       
       void process();
+  };
+  class MultiKDtree :public Node {
+  public:
+      using Node::Node;
+     
+
+      KdTree* NewBuildKdTree(Vector3D* Points, long number)
+      {
+          std::cout << "Start" << std::endl;
+  
+          float* m_Radius = new float[number];
+          
+          KdTree* mp_kdTree = new KdTree(Points, number,16);
+          delete[] Points;
+           return mp_kdTree;
+      }
+      void init() {
+          add_input("points", typeid(PointCollection));
+          add_output("KDTree1", typeid(KdTree));
+          add_output("KDTree2", typeid(KdTree));
+      }
+      void gui() {
+
+      }
+      void process() ;
+
+
   };
   class BuildKDtree :public Node {
   public:
@@ -88,22 +116,21 @@ namespace geoflow::nodes::mat {
       KdTree* BuildKdTree( Vector3D* Points, long number, int nMaxBucketSize)
       {
           std::cout << "Start" << std::endl;
-          //if (0 == number) return false;
-
-          //Vector3D* pPoints = new Vector3D[m_nPoints];
-
-          // save the radius not finished 
-          
+           
           float* m_Radius = new float[number];
- 
           
           mp_kdTree = new KdTree(Points, number, nMaxBucketSize);
           delete[] Points;
-          //SAFE_DELETE_ARRAY(pPoints);
           std::cout << "KDTree Built" << std::endl;
-
-
           return mp_kdTree;
+      }
+      std::vector<int> GetLevelPoints(std::vector<int> vec_long, std::vector<int> vec_short) {
+          std::vector<int> vec_result(20);
+          std::vector<int>::iterator it;
+          it = std::set_difference(vec_long.begin(), vec_long.end(), vec_short.begin(), vec_short.end(), vec_result.begin());
+          vec_result.resize(it - vec_result.begin());
+      
+          return vec_result;
       }
 
       void init() {
@@ -115,6 +142,7 @@ namespace geoflow::nodes::mat {
       void gui() {
 
       }
+
       void process();
   };
   class VisibiltyQurey :public Node 
@@ -290,7 +318,7 @@ namespace geoflow::nodes::mat {
                 
               }
           }
-          std::cout << "size of tc:" << tc.size() << std::endl;
+          //std::cout << "size of tc:" << tc.size() << std::endl;
           return tc;          
       }
       vec3f ComputeNormals(geoflow::TriangleCollection tc) {
@@ -366,7 +394,61 @@ namespace geoflow::nodes::mat {
 
   };
   
+  class OneQuery:public Node  {
+  public:
+      using Node::Node;
+      void init() {
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
+          add_input("Vector1", typeid(Vector3D));
+          add_input("Vector2", typeid(Vector3D));
+          add_output("MAT_points", typeid(PointCollection));
+          add_output("radii", typeid(vec1f));
+          
+      }
+      void process();
 
+      int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) {
+          if ((fDst1 * fDst2) >= 0.0f) return 0;
+          if (fDst1 == fDst2) return 0;
+          Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
+          return 1;
+      }
+
+      int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis) {
+          if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2]&& Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
+          if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          return 0;
+      }
+      int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      {
+          if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
+          if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
+          if (L2[1] < B1[1] && L1[1] < B1[1]) return false;
+          if (L2[1] > B2[1] && L1[1] > B2[1]) return false;
+          if (L2[2] < B1[2] && L1[2] < B1[2]) return false;
+          if (L2[2] > B2[2] && L1[2] > B2[2]) return false;
+          if (L1[0] > B1[0] && L1[0] < B2[0] &&
+              L1[1] > B1[1] && L1[1] < B2[1] &&
+              L1[2] > B1[2] && L1[2] < B2[2])
+          {
+              Hit = L1;
+              return true;
+          }
+          if ((GetIntersection(L1[0] - B1[0], L2[0] - B1[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B1[1], L2[1] - B1[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B1[2], L2[2] - B1[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3))
+              || (GetIntersection(L1[0] - B2[0], L2[0] - B2[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B2[1], L2[1] - B2[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B2[2], L2[2] - B2[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3)))
+              return true;
+
+          return false;
+      }
+
+  };
 
 
 }
