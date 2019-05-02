@@ -65,17 +65,63 @@ namespace geoflow::nodes::mat {
       
       using Node::Node;
       void init() {
-          add_input("KDTree1", typeid(arr3f));
-          add_input("KDTree2", typeid(arr3f));
-          //add_output("out_radii", typeid(vec1f));
+          add_input("Vector1", typeid(Vector3D));          
+          add_output("MAT_points", typeid(PointCollection));
+          
 
       }
       void gui() {
-          //ImGui::InputText("File path", filepath, IM_ARRAYSIZE(filepath));
+          
     
       }
+      static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
+          std::vector<Vector3D> points;
+          Vector3D point;
+          int nLongitude = 100;
+          int nLatitude = 2 * nLongitude;
+          int p, s, i, j;
+          float x, y, z, out;
+          int nPitch = nLongitude + 1;
+          float DEGS_TO_RAD = 3.14159f / 180.0f;
+
+          float pitchInc = (180. / (float)nPitch) * DEGS_TO_RAD;
+          float rotInc = (360. / (float)nLatitude) * DEGS_TO_RAD;
+          for (p = 1; p < nPitch; p++)     // Generate all "intermediate vertices":
+          {
+              out = radius * sin((float)p * pitchInc);
+              if (out < 0) out = -out;    // abs() command won't work with all compilers
+              y = radius * cos(p * pitchInc);
+              //printf("OUT = %g\n", out);    // bottom vertex
+              //printf("nPitch = %d\n", nPitch);    // bottom vertex
+              for (s = 0; s < nLatitude; s++)
+              {
+                  x = out * cos(s * rotInc);
+                  z = out * sin(s * rotInc);
+                  point.x = x + v1.x;
+                  point.y = y + v1.y;
+                  point.z = z + v1.z;
+                  //outfile << x + pt.x << "," << y + pt.y << "," << z + pt.z << std::endl;
+                  //numVertices++;
+                  points.push_back(point);
+              }
+          }
+          return points;
+      }
       
-      void process();
+      void process() {
+          Vector3D v1 = input("Vector1").get<Vector3D>();
+
+          PointCollection outpt;
+          auto v2_list = testNode::SpherePoints(v1, 500);
+          for (Vector3D a : v2_list) {
+              outpt.push_back({a.x,a.y,a.z});
+
+          }
+          output("MAT_points").set(outpt);
+
+
+
+      };
   };
   class MultiKDtree :public Node {
   public:
@@ -113,6 +159,9 @@ namespace geoflow::nodes::mat {
       Vector3D* mp_Points;
       long m_nPoints;
 
+      
+      
+
       KdTree* BuildKdTree( Vector3D* Points, long number, int nMaxBucketSize)
       {
           std::cout << "Start" << std::endl;
@@ -133,8 +182,36 @@ namespace geoflow::nodes::mat {
           return vec_result;
       }
 
+      std::vector<KdTree::sphere> GetLevelPoints(Vector3D max, Vector3D min, std::vector<KdTree::sphere> &points) {
+          std::vector<KdTree::sphere> LevelPoints;
+          std::vector<KdTree::sphere>::iterator it;
+          for (auto a:points){
+              if(a.pos.x<=max.x&&a.pos.x>=min.x)
+                  if(a.pos.y<=max.y&&a.pos.y>=min.y)
+                      if (a.pos.z <= max.z&&a.pos.z >= min.z) {
+
+                          LevelPoints.push_back(a);
+                          for (it = points.begin(); it != points.end();) {
+                              if ((*it).pos == a.pos)
+                                  it = points.erase(it);
+                              else
+                              {
+                                  it++;
+                              }
+                          }
+                      }
+              
+          }
+
+
+
+          return LevelPoints;
+      
+      }
+
       void init() {
           add_input("points", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
           add_output("KDTree", typeid(KdTree));
          
 
@@ -158,7 +235,7 @@ namespace geoflow::nodes::mat {
           add_output("Radii_of_MAT", typeid(vec1f));
       }
       void process();
-      float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
+      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
       {
           float ab = sqrt(pow((a.x - b.x), 2.0) + pow((a.y - b.y), 2.0) + pow((a.z - b.z), 2.0));
           float as = sqrt(pow((a.x - s.x), 2.0) + pow((a.y - s.y), 2.0) + pow((a.z - s.z), 2.0));
@@ -277,7 +354,7 @@ namespace geoflow::nodes::mat {
           vec3f all_normals;
 
           for (int i = 0; i < mat_points.size(); i++) {
-              std::cout << "index i: " <<i<< std::endl;
+              
               auto  tc= Triangulation::StandardSphere(mat_points[i], radii[i]);
               for (auto a : tc) {
                   all_tc.push_back(a);
@@ -285,7 +362,7 @@ namespace geoflow::nodes::mat {
           }
           all_normals = ComputeNormals(all_tc);
 
-          std::cout << "Triangulation Done" << std::endl;
+          std::cout << "Triangulation Done:" <<mat_points.size()<< std::endl;
           output("triangle_collection").set(all_tc);
           output("normals").set(all_normals);
       };
@@ -295,8 +372,8 @@ namespace geoflow::nodes::mat {
           geoflow::TriangleCollection tc;
           int Density = 10;
           std::array<float, 3> points[11][21];
-          std::cout << "start triangulation" << std::endl;
-          std::cout << "debug test" << std::endl;
+          //std::cout << "start triangulation" << std::endl;
+          //std::cout << "debug test" << std::endl;
           for (int t = 0; t <= Density; t++)
           {
               double vt = t * (M_PI / Density);
@@ -402,12 +479,17 @@ namespace geoflow::nodes::mat {
           add_input("MATpoints", typeid(PointCollection));
           add_input("radii", typeid(vec1f));
           add_input("Vector1", typeid(Vector3D));
-          add_input("Vector2", typeid(Vector3D));
+          //add_input("Vector2", typeid(Vector3D));
           add_output("MAT_points", typeid(PointCollection));
           add_output("radii", typeid(vec1f));
           
       }
       void process();
+
+      static float PointToPointDis(Vector3D p1, Vector3D p2) {         
+          float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));         
+          return dis;
+      }
 
       int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) {
           if ((fDst1 * fDst2) >= 0.0f) return 0;
@@ -446,6 +528,40 @@ namespace geoflow::nodes::mat {
               return true;
 
           return false;
+      }
+
+       static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
+          std::vector<Vector3D> points;
+          Vector3D point;
+          int nLongitude = 100;
+          int nLatitude = 2 * nLongitude;
+          int p, s, i, j;
+          float x, y, z, out;
+          int nPitch = nLongitude + 1;
+          float DEGS_TO_RAD = 3.14159f / 180.0f;
+
+          float pitchInc = (180. / (float)nPitch) * DEGS_TO_RAD;
+          float rotInc = (360. / (float)nLatitude) * DEGS_TO_RAD;
+          for (p = 1; p < nPitch; p++)     // Generate all "intermediate vertices":
+          {
+              out = radius * sin((float)p * pitchInc);
+              if (out < 0) out = -out;    // abs() command won't work with all compilers
+              y = radius * cos(p * pitchInc);
+              //printf("OUT = %g\n", out);    // bottom vertex
+              //printf("nPitch = %d\n", nPitch);    // bottom vertex
+              for (s = 0; s < nLatitude; s++)
+              {
+                  x = out * cos(s * rotInc);
+                  z = out * sin(s * rotInc);
+                  point.x = x + v1.x;
+                  point.y = y + v1.y;
+                  point.z = z + v1.z;
+                  //outfile << x + pt.x << "," << y + pt.y << "," << z + pt.z << std::endl;
+                  //numVertices++;
+                  points.push_back(point);
+              }
+          }
+          return points;
       }
 
   };

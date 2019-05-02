@@ -6,6 +6,7 @@
 
 
 
+
 namespace geoflow::nodes::mat {
 
     void ComputeMedialAxisNode::process() {
@@ -129,20 +130,7 @@ namespace geoflow::nodes::mat {
         output("normals").set(normals_vec3f);
     }
 
-    void testNode::process() 
-    {
-        //filepath = "C:\Users\tengw\Documents\Git\test.las";
-        std::cout << "Multi KDtree test running" << std::endl;
-        auto kdtree1 = input("KDTrees1").get<KdTree*>();
-        auto kdtree2 = input("KDTrees2").get<KdTree*>();
-        
-        auto center1 = (*kdtree1).centerofBoundingBox();
-        auto center2 = (*kdtree2).centerofBoundingBox();
-
-        std::cout << center1.x << "," << center1.y << "," << center1.z << std::endl;
-        std::cout << center2.x << "," << center2.y << "," << center2.z << std::endl;
-
-    }
+    
     void MultiKDtree::process() {
         auto point_collection = input("points").get<PointCollection>();
         masb::ma_data madata;
@@ -187,11 +175,19 @@ namespace geoflow::nodes::mat {
     void BuildKDtree::process()
     {
         auto point_collection = input("points").get<PointCollection>();
+        auto radii = input("radii").get<vec1f>();
         masb::ma_data madata;
         madata.m = point_collection.size();
         m_nPoints = point_collection.size();
         std::cout << "MAT point size:" << madata.m << std::endl;
-        Vector3D* mp_Points = new Vector3D[m_nPoints];
+
+        KdTree::sphere* mp_Points = new KdTree::sphere[m_nPoints];
+
+
+        Vector3D* Points = new Vector3D[m_nPoints];
+
+
+
         Vector3D center;
 
         vec3f points;
@@ -201,50 +197,121 @@ namespace geoflow::nodes::mat {
         }
         std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\MAT_points_out.txt";
         std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+
+        std::vector<KdTree::sphere> allPointsVec;
+
+
         for (int i = 0; i < m_nPoints; i++) {
-            mp_Points[i].x = points[i][0];
-            mp_Points[i].y = points[i][1];
-            mp_Points[i].z = points[i][2];
-            outfile<< mp_Points[i].x << "," << mp_Points[i].y << "," << mp_Points[i].z << std::endl;
+
+
+
+
+            mp_Points[i].pos.x = points[i][0];
+            mp_Points[i].pos.y = points[i][1];
+            mp_Points[i].pos.z = points[i][2];
+            mp_Points[i].radius = radii[i];
+
+            Points[i].x = points[i][0];
+            Points[i].y = points[i][1];
+            Points[i].z = points[i][2];
+
+
+
+
+            outfile<< mp_Points[i].pos.x << "," << mp_Points[i].pos.y << "," << mp_Points[i].pos.z << std::endl;
+            allPointsVec.push_back(mp_Points[i]);
         }
         outfile.close();
         
-        KdTree* kd = BuildKdTree(mp_Points, m_nPoints,20);       
+        KdTree* kd = BuildKdTree(Points, m_nPoints,20);       
         //center = (*kd).centerofBoundingBox();
        
         //std::cout << "center point of bounding box:" << center.x << "," << center.y << "," << center.z << std::endl;
         std::cout<< "number of bounding box:" << (*kd).m_maxpoint.size() << std::endl;
-        std::cout << "Vector size of kdtreepoints:" << (*kd).m_boxKdTreePoint.size() << std::endl;
+        //std::cout << "Vector size of kdtreepoints:" << (*kd).m_boxKdTreePoint.size() << std::endl;
         std::cout << "size of level:" << (*kd).m_currentlevel.size() << std::endl;
         std::cout << "KDTree output done"<<std::endl;
-        
-        (*kd).m_levelPointsIndex.resize((*kd).m_currentlevel.size());
-        int count = 0;
-        for (int i = 0; i < (*kd).m_levelPointsIndex.size(); i++) {
-            auto PointIndex = BuildKDtree::GetLevelPoints((*kd).m_boxKdTreePoint[i+1], (*kd).m_boxKdTreePoint[i]);
-            (*kd).m_levelPointsIndex[i]= PointIndex;
-            count += PointIndex.size();
-        }
-        std::vector<int> all_index;
-        for (int i = 0; i < m_nPoints; i++) {
-            all_index.push_back(i);
-        }
-        std::vector<int> data_index;
-        for (int j = 0; j < (*kd).m_levelPointsIndex.size(); j++) {
-            for (int a : (*kd).m_levelPointsIndex[j]) {
-                data_index.push_back(a);
-            }
-        } 
-        std::sort(data_index.begin(), data_index.end());
-        for (int i = 0;i< m_nPoints-1; i++) {
-            if (data_index[i] != all_index[i]) {
-                std::cout << "missing point index:" << i << std::endl;
-                
-                //no 47 directly to 48; 46 () 48
-                break;
-            }
 
+        
+        int new_count = 0;
+        for (int i = (*kd).m_maxpoint.size()-1 ; i >=0; i--)
+        {
+
+            auto levelpoints = BuildKDtree::GetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], allPointsVec); 
+            new_count +=levelpoints.size() ;
+            //std::cout <<"Number of points in each level:"<< levelpoints.size() << std::endl;
+            (*kd).m_levelpoints.push_back(levelpoints);
         }
+
+
+        std::cout << "Total level points:" << new_count << std::endl;
+        std::cout << "The size of allPointsVec:" << allPointsVec.size() << std::endl;
+        std::cout << "The size of m_levelpoints:" << (*kd).m_levelpoints.size() << std::endl;
+        std::cout << "The size of boxs:" << (*kd).m_maxpoint.size() << std::endl;
+
+        std::cout << "checking points in each box" << std::endl;
+        int flag = 0;
+        for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+            for (auto point : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i-1]) {
+                if(point.pos.x<= (*kd).m_maxpoint[i].x && point.pos.x >= (*kd).m_minpoint[i].x)
+                    if(point.pos.y <= (*kd).m_maxpoint[i].y && point.pos.y >= (*kd).m_minpoint[i].y)
+                        if (point.pos.z <= (*kd).m_maxpoint[i].z && point.pos.z >= (*kd).m_minpoint[i].z)
+                        {
+                            flag++;
+                        }
+            
+            }
+        }
+        std::cout << "Correct points:" << flag<<std::endl;
+        //(*kd).m_levelPointsIndex.resize((*kd).m_currentlevel.size());
+        //int testflag = 0;
+        //int count = 0;
+        //for (int i = 0; i < (*kd).m_levelPointsIndex.size(); i++) {
+        //    auto PointIndex = BuildKDtree::GetLevelPoints((*kd).m_boxKdTreePoint[i+1], (*kd).m_boxKdTreePoint[i]);
+        //    (*kd).m_levelPointsIndex[i]= PointIndex;
+        //    // whether points are inside bounding box//
+        //    for (int ptindex : PointIndex) {
+        //        if((mp_Points[ptindex].x<=(*kd).m_maxpoint[i].x )&&(mp_Points[ptindex].x >= (*kd).m_minpoint[i].x))
+        //            if((mp_Points[ptindex].y <= (*kd).m_maxpoint[i].y) && (mp_Points[ptindex].y >= (*kd).m_minpoint[i].y))
+        //                if ((mp_Points[ptindex].z <= (*kd).m_maxpoint[i].z) && (mp_Points[ptindex].z >= (*kd).m_minpoint[i].z))
+        //                {
+        //                    testflag++;
+        //                }
+        //    }
+        //    //
+        //    count += PointIndex.size();
+        //}
+
+
+
+
+
+
+
+        //std::vector<int> all_index;
+        //for (int i = 0; i < m_nPoints; i++) {
+        //    all_index.push_back(i);
+        //}
+        //std::vector<int> data_index;
+        //for (int j = 0; j < (*kd).m_levelPointsIndex.size(); j++) {
+        //    for (int a : (*kd).m_levelPointsIndex[j]) {
+        //        data_index.push_back(a);
+        //    }
+        //} 
+        //std::sort(data_index.begin(), data_index.end());
+        //for (int i = 0;i< m_nPoints-1; i++) {
+        //    if (data_index[i] != all_index[i]) {
+        //        std::cout << "missing point index:" << i << std::endl;
+        //        
+        //        //no 47 directly to 48; 46 () 48
+        //        break;
+        //    }
+
+        //}
+
+
+
+
         /*std::cout << all_index[46] << std::endl;
         std::cout << all_index[47] << std::endl;
         std::cout << data_index[46] << std::endl;
@@ -257,17 +324,18 @@ namespace geoflow::nodes::mat {
 
 
 
-        std::cout << "total points in all level of kdtree:" << count << std::endl;
+        //std::cout << "total points in all level of kdtree:" << count << std::endl;
+        //std::cout << "test flag:" << testflag << std::endl;
         
     
-        std::cout << "boundingbox" << std::endl;
-        /*std::cout << (*kd).m_maxpoint[0][0] << "," << (*kd).m_maxpoint[0][1] << "," << (*kd).m_maxpoint[0][2] << std::endl;
-        std::cout << (*kd).m_minpoint[0][0] << "," << (*kd).m_minpoint[0][1] << "," << (*kd).m_minpoint[0][2] << std::endl;
-        std::cout << (*kd).m_maxpoint[1][0] << "," << (*kd).m_maxpoint[1][1] << "," << (*kd).m_maxpoint[1][2] << std::endl;
-        std::cout << (*kd).m_minpoint[1][0] << "," << (*kd).m_minpoint[1][1] << "," << (*kd).m_minpoint[1][2] << std::endl;*/
+        /*std::cout << "boundingbox" << std::endl;
+        for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+            std::cout << "box index:" << i << std::endl;
+            std::cout << (*kd).m_maxpoint[i][0] << "," << (*kd).m_maxpoint[i][1] << "," << (*kd).m_maxpoint[i][2] << std::endl;
+            std::cout << (*kd).m_minpoint[i][0] << "," << (*kd).m_minpoint[i][1] << "," << (*kd).m_minpoint[i][2] << std::endl;
+        }*/
         
-        std::cout << (*kd).m_maxpoint[2081][0] << "," << (*kd).m_maxpoint[2081][1] << "," << (*kd).m_maxpoint[2081][2] << std::endl;
-        std::cout << (*kd).m_minpoint[2081][0] << "," << (*kd).m_minpoint[2081][1] << "," << (*kd).m_minpoint[2081][2] << std::endl;
+        
         
         //std::cout << "points in the boundingbox"<<std::endl;    
         //
@@ -288,20 +356,29 @@ namespace geoflow::nodes::mat {
         std::cout << "OneQuery start" << std::endl;
 
         //----------------input------------------------//
-        Vector3D v1 = input("Vector1").get<Vector3D>();
-        Vector3D v2 = input("Vector2").get<Vector3D>();
+
         auto kd = input("KDTree").get<KdTree*>();
         auto point_collection = input("MATpoints").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
 
 
+        // -------------output----------------------//
+        PointCollection visible_mat;
+        vec1f visible_radii;
 
+        // -------------------------------------//
 
         masb::ma_data madata;
         madata.m = point_collection.size();
         int number = point_collection.size();
         std::cout << "MAT point size:" << madata.m << std::endl;
+
+
         Vector3D* mp_Points = new Vector3D[number];
+
+
+
+
         vec3f points;
         points.reserve(madata.m);
         for (auto& p : point_collection) {
@@ -313,40 +390,64 @@ namespace geoflow::nodes::mat {
             mp_Points[i].z = points[i][2];
         }
 
-        // -------------output----------------------//
-        PointCollection visible_mat;
-        vec1f visible_radii;
+        Vector3D v1 = input("Vector1").get<Vector3D>();
 
-        // -------------------------------------//
+        auto v2_list = OneQuery::SpherePoints(v1, 500);
+        //Vector3D v2 = input("Vector2").get<Vector3D>();
 
         
-        
 
-        Vector3D hit;
-        int count = 0;
-        for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
-            bool a = OneQuery::CheckLineBox((*kd).m_minpoint[i],(*kd).m_maxpoint[i], v1, v2, hit);
-            //std::cout << "a£º" <<a<< std::endl;
-            if (a == 1) {
-                std::cout << "intersect bounding box level:" << i << std::endl;
-                std::cout << "points inside" << std::endl;
-                for (int pt_index : (*kd).m_levelPointsIndex[i]) {
-                    count++;
-                    std::cout << pt_index << std::endl;
-                    
-                    std::cout << mp_Points[pt_index].x << "," << mp_Points[pt_index].y << "," << mp_Points[pt_index].z << std::endl;
+        for (Vector3D v2 : v2_list) {
+            std::vector<Vector3D> pointlist;
+            std::vector<float> radiilist;
+            Vector3D hit;
+            int count = 0;
+            for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+                bool a = OneQuery::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
+                //std::cout << "a£º" <<a<< std::endl;
+                if (a == 1) {
+                    //std::cout << "intersect bounding box level:" << i << std::endl;
+                    //std::cout << "points inside" << std::endl;
+                    for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+                        count++;
+                        //std::cout << pt_index << std::endl;
+
+                        //std::cout << mp_Points[pt_index].x << "," << mp_Points[pt_index].y << "," << mp_Points[pt_index].z << std::endl;
+                        float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
+                        //std::cout << "distance to line:" << dis << std::endl;
+                        
+                        if (dis <= pt.radius) {
+                            //std::cout << "Radius:" << pt.radius<<std::endl;
+                            pointlist.push_back(pt.pos);
+                            radiilist.push_back(pt.radius);
+                            //visible_mat.push_back({ mp_Points[pt_index].x,mp_Points[pt_index].y,mp_Points[pt_index].z });
+                            //visible_radii.push_back(radii[pt_index]);
+                        }
+                    }
+                    //std::cout << "total points inside:" << count << std::endl;
                 }
+            }
+            
+
+            if (pointlist.size() > 0) {
+                std::cout << "----------------this direction has :" << pointlist.size()<<"   intersected"<< std::endl;
+                float minDis = OneQuery::PointToPointDis(v1, pointlist[0]);
+                //float minDis = OneQuery::PointToPointDis(v1, pointlist[0]) - radiilist[0];
                 
+                int flag = 0;
+                for (int i = 0; i < pointlist.size(); i++)
+                {
+                    //float temp = OneQuery::PointToPointDis(v1, pointlist[i]) - radiilist[i];
+                    float temp = OneQuery::PointToPointDis(v1, pointlist[i]);
+                    if (temp < minDis) {
+                        minDis = temp;
+                        flag = i;
+                    }
+                }
+                visible_mat.push_back({ pointlist[flag].x,pointlist[flag].y,pointlist[flag].z });
+                visible_radii.push_back(radiilist[flag]);
             }
         }
-        std::cout << "total points inside:" << count << std::endl;
-
-           
-
-
-
-
-
 
         output("MAT_points").set(visible_mat);
         output("radii").set(visible_radii);
