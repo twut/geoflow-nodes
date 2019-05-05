@@ -17,6 +17,7 @@ namespace geoflow::nodes::mat {
     R->register_node<Triangulation>("Triangulation");    
     R->register_node<MultiKDtree>("MultiKDtree");
     R->register_node<OneQuery>("Onequery");
+    R->register_node<MutiThreadsOneQuery>("MultiThreadsQuery");
     return R;
   }
 

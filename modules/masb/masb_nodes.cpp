@@ -3,11 +3,13 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <thread>
 
 
 
 
 namespace geoflow::nodes::mat {
+    
 
     void ComputeMedialAxisNode::process() {
         auto point_collection = input("points").get<PointCollection>();
@@ -263,95 +265,83 @@ namespace geoflow::nodes::mat {
             }
         }
         std::cout << "Correct points:" << flag<<std::endl;
-        //(*kd).m_levelPointsIndex.resize((*kd).m_currentlevel.size());
-        //int testflag = 0;
-        //int count = 0;
-        //for (int i = 0; i < (*kd).m_levelPointsIndex.size(); i++) {
-        //    auto PointIndex = BuildKDtree::GetLevelPoints((*kd).m_boxKdTreePoint[i+1], (*kd).m_boxKdTreePoint[i]);
-        //    (*kd).m_levelPointsIndex[i]= PointIndex;
-        //    // whether points are inside bounding box//
-        //    for (int ptindex : PointIndex) {
-        //        if((mp_Points[ptindex].x<=(*kd).m_maxpoint[i].x )&&(mp_Points[ptindex].x >= (*kd).m_minpoint[i].x))
-        //            if((mp_Points[ptindex].y <= (*kd).m_maxpoint[i].y) && (mp_Points[ptindex].y >= (*kd).m_minpoint[i].y))
-        //                if ((mp_Points[ptindex].z <= (*kd).m_maxpoint[i].z) && (mp_Points[ptindex].z >= (*kd).m_minpoint[i].z))
-        //                {
-        //                    testflag++;
-        //                }
-        //    }
-        //    //
-        //    count += PointIndex.size();
-        //}
-
-
-
-
-
-
-
-        //std::vector<int> all_index;
-        //for (int i = 0; i < m_nPoints; i++) {
-        //    all_index.push_back(i);
-        //}
-        //std::vector<int> data_index;
-        //for (int j = 0; j < (*kd).m_levelPointsIndex.size(); j++) {
-        //    for (int a : (*kd).m_levelPointsIndex[j]) {
-        //        data_index.push_back(a);
-        //    }
-        //} 
-        //std::sort(data_index.begin(), data_index.end());
-        //for (int i = 0;i< m_nPoints-1; i++) {
-        //    if (data_index[i] != all_index[i]) {
-        //        std::cout << "missing point index:" << i << std::endl;
-        //        
-        //        //no 47 directly to 48; 46 () 48
-        //        break;
-        //    }
-
-        //}
-
-
-
-
-        /*std::cout << all_index[46] << std::endl;
-        std::cout << all_index[47] << std::endl;
-        std::cout << data_index[46] << std::endl;
-        std::cout << data_index[47] << std::endl;
-        std::cout << points[47][0] << "," << points[47][1] << "," << points[47][2]<< "," << std::endl;*/
         
-        
-
-        //std::cout << "missing point index:" << diff_index[0] << std::endl;
-
-
-
-        //std::cout << "total points in all level of kdtree:" << count << std::endl;
-        //std::cout << "test flag:" << testflag << std::endl;
-        
-    
-        /*std::cout << "boundingbox" << std::endl;
-        for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
-            std::cout << "box index:" << i << std::endl;
-            std::cout << (*kd).m_maxpoint[i][0] << "," << (*kd).m_maxpoint[i][1] << "," << (*kd).m_maxpoint[i][2] << std::endl;
-            std::cout << (*kd).m_minpoint[i][0] << "," << (*kd).m_minpoint[i][1] << "," << (*kd).m_minpoint[i][2] << std::endl;
-        }*/
-        
-        
-        
-        //std::cout << "points in the boundingbox"<<std::endl;    
-        //
-
-        ///*int size = (*kd).m_boxKdTreePoint.size();
-        //std::cout << "size:" << size << std::endl;
-        //auto a0 = (*kd).m_boxKdTreePoint[1];
-        //std::cout << "size:" << a0.size() << std::endl;
-        //for (auto b0 : a0) {
-        //    std::cout << b0  << std::endl;
-        //    std::cout << mp_Points[b0].x << "," << mp_Points[b0].y << "," << mp_Points[b0].z << std::endl;
-        //}*/
  
         output("KDTree").set(kd);
         
     }
+
+    void MutiThreadsOneQuery::process() {
+        //----------------input------------------------//
+        std::cout << "Mutiple Threads Query start" << std::endl;
+        auto kd = input("KDTree").get<KdTree*>();
+        auto point_collection = input("MATpoints").get<PointCollection>();
+        auto radii = input("radii").get<vec1f>();
+        // -------------output----------------------//
+        PointCollection visible_mat;
+        vec1f visible_radii;
+
+        // -------------------------------------//
+        masb::ma_data madata;
+        madata.m = point_collection.size();
+        int number = point_collection.size();
+        std::cout << "MAT point size:" << madata.m << std::endl;
+
+
+        Vector3D* mp_Points = new Vector3D[number];
+
+
+
+
+        vec3f points;
+        points.reserve(madata.m);
+        for (auto& p : point_collection) {
+            points.push_back({ p[0], p[1], p[2] });
+        }
+        for (int i = 0; i < number; i++) {
+            mp_Points[i].x = points[i][0];
+            mp_Points[i].y = points[i][1];
+            mp_Points[i].z = points[i][2];
+        }
+
+        Vector3D v1 = input("Vector1").get<Vector3D>();
+
+        auto v2_list = OneQuery::SpherePoints(v1, 500);
+        int vetsize = v2_list.size();
+        std::vector<Vector3D> threadvec1;
+        std::vector<Vector3D> threadvec2;
+
+
+        std::for_each(begin(v2_list), begin(v2_list) + 0.5*vetsize, [&threadvec1](Vector3D x) {
+            threadvec1.push_back(x);
+        });
+        std::for_each(begin(v2_list) + 0.5*vetsize, end(v2_list), [&threadvec2](Vector3D y) {
+            threadvec2.push_back(y);
+        });
+        std::cout << "Vector divide done" << std::endl;
+
+
+        std::vector<sphere> visble_sph;
+        std::thread t1(MutiThreadsOneQuery::GetQueryResult, threadvec1, v1,kd,std::ref(visble_sph) );
+        t1.join();
+        std::thread t2(MutiThreadsOneQuery::GetQueryResult, threadvec2, v1, kd, std::ref(visble_sph));
+        t2.join();
+        std::cout << "Multi Threads query done" << std::endl;
+        std::cout << "Visble MAT size:" << visble_sph.size() << std::endl;
+
+
+        for (auto item : visble_sph) {
+            visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
+            visible_radii.push_back(item.r);
+        }
+        
+        output("MAT_points").set(visible_mat);
+        output("radii").set(visible_radii);
+
+
+    }
+
+
     void OneQuery::process() {
         std::cout << "OneQuery start" << std::endl;
 

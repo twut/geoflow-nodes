@@ -2,13 +2,15 @@
 #include"kdTree.h"
 #include <compute_ma_processing.h>
 #include <compute_normals_processing.h>
-
+#include <thread>
+#include <mutex>
 
 # define M_PI           3.14159265358979323846 
 
 
 namespace geoflow::nodes::mat {
 
+  static std::mutex mtx;
 
   class ComputeMedialAxisNode:public Node {
     public:
@@ -307,9 +309,9 @@ namespace geoflow::nodes::mat {
           add_output("vector", typeid(Vector3D));
           add_output("point", typeid(PointCollection));
 
-          add_param("x_value", (float)-99.0594);
-          add_param("y_value", (float)-90.828);
-          add_param("z_value", (float)6.59866);
+          add_param("x_value", (float)-50.0);
+          add_param("y_value", (float)-50.0);
+          add_param("z_value", (float)50);
       }
 
       void gui() {
@@ -471,6 +473,123 @@ namespace geoflow::nodes::mat {
 
   };
   
+  class MutiThreadsOneQuery :public Node {
+  public:
+      using Node::Node;
+      
+      
+      struct  sphere
+      {
+          Vector3D pos;
+          float r;
+      };
+      //std::vector<sphere> m_visble_sph;
+      
+      void init() {
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
+          add_input("Vector1", typeid(Vector3D));
+
+          add_output("MAT_points", typeid(PointCollection));
+          add_output("radii", typeid(vec1f));
+      }
+      
+      static float PointToPointDis(Vector3D p1, Vector3D p2) {
+          float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
+          return dis;
+      }
+
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) {
+          if ((fDst1 * fDst2) >= 0.0f) return 0;
+          if (fDst1 == fDst2) return 0;
+          Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
+          return 1;
+      }
+
+      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis) {
+          if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
+          if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          return 0;
+      }
+      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      {
+          if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
+          if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
+          if (L2[1] < B1[1] && L1[1] < B1[1]) return false;
+          if (L2[1] > B2[1] && L1[1] > B2[1]) return false;
+          if (L2[2] < B1[2] && L1[2] < B1[2]) return false;
+          if (L2[2] > B2[2] && L1[2] > B2[2]) return false;
+          if (L1[0] > B1[0] && L1[0] < B2[0] &&
+              L1[1] > B1[1] && L1[1] < B2[1] &&
+              L1[2] > B1[2] && L1[2] < B2[2])
+          {
+              Hit = L1;
+              return true;
+          }
+          if ((GetIntersection(L1[0] - B1[0], L2[0] - B1[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B1[1], L2[1] - B1[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B1[2], L2[2] - B1[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3))
+              || (GetIntersection(L1[0] - B2[0], L2[0] - B2[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B2[1], L2[1] - B2[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B2[2], L2[2] - B2[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3)))
+              return true;
+
+          return false;
+      }
+     
+      static void GetQueryResult(std::vector<Vector3D> vecList, Vector3D v1, KdTree *kd, std::vector<MutiThreadsOneQuery::sphere> &visble_sph) {
+          
+          
+          for (Vector3D v2 : vecList) {
+              MutiThreadsOneQuery::sphere result;
+              std::vector<Vector3D> pointlist;
+              std::vector<float> radiilist;
+              Vector3D hit;
+              int count = 0;
+              for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+                  bool a = MutiThreadsOneQuery::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
+                  if (a == 1) {                      
+                      for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+                          count++;                          
+                          float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);                       
+                          if (dis <= pt.radius) {                          
+                              pointlist.push_back(pt.pos);
+                              radiilist.push_back(pt.radius);                              
+                          }
+                      }                      
+                  }
+              }
+              if (pointlist.size() > 0) {
+                  //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;
+                  float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
+                  
+                  int flag = 0;
+                  for (int i = 0; i < pointlist.size(); i++)
+                  {
+                      //float temp = OneQuery::PointToPointDis(v1, pointlist[i]) - radiilist[i];
+                      float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]);
+                      if (temp < minDis) {
+                          minDis = temp;
+                          flag = i;
+                      }
+                  }
+                  result.pos = { pointlist[flag].x,pointlist[flag].y,pointlist[flag].z };
+                  result.r = radiilist[flag];
+                  //std::cout << "result :" << result.pos.x<<"," << result.pos.y<<","<< result.pos.z<< std::endl;
+                  mtx.lock();
+                  visble_sph.push_back(result);
+                  mtx.unlock();
+              }
+            }
+          
+      };
+      void process();
+  };
+
+
+
   class OneQuery:public Node  {
   public:
       using Node::Node;
