@@ -2,6 +2,7 @@
 
 #include <geoflow/core/geoflow.hpp>
 #include "tinsimp.hpp"
+#include <geoflow/gui/osdialog.hpp>
 
 namespace geoflow::nodes::cgal {
 
@@ -238,6 +239,20 @@ namespace geoflow::nodes::cgal {
       ImGui::Checkbox("Write binary output", &param<bool>("write_binary"));
     }
     void process();
+  };
+  class PLYReaderNode :public Node {
+  public:
+      using Node::Node;
+      void init() {
+          add_output("points", typeid(PointCollection)); //TT_point_collection_list
+          add_output("normals", typeid(vec3f));
+
+          add_param("filepath", (std::string) "out.ply");
+      }
+      void gui() {
+          ImGui::FilePicker(OSDIALOG_OPEN, param<std::string>("filepath"));
+      }
+      void process();
   };
 
   class IsoLineNode:public Node {

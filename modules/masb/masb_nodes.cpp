@@ -4,7 +4,7 @@
 #include <sstream>
 #include <algorithm>
 #include <thread>
-
+#include <time.h>
 
 
 
@@ -14,6 +14,14 @@ namespace geoflow::nodes::mat {
     void ComputeMedialAxisNode::process() {
         auto point_collection = input("points").get<PointCollection>();
         auto normals_vec3f = input("normals").get<vec3f>();
+
+        float min_z= point_collection[0][2];
+        for (int i = 0; i < point_collection.size(); i++) 
+        {
+            float temp = point_collection[i][2];
+            if (temp < min_z) min_z = temp;
+        }
+
 
         masb::ma_data madata;
         madata.m = point_collection.size();
@@ -69,6 +77,7 @@ namespace geoflow::nodes::mat {
         output("ma_radii").set(ma_radii);
         output("ma_qidx").set(ma_qidx);
         output("ma_is_interior").set(ma_is_interior);
+        output("min_z").set(min_z);
     }
 
     void MATfilter::process() {
@@ -76,6 +85,10 @@ namespace geoflow::nodes::mat {
         auto matpoints = input("ma_coords").get<PointCollection>();
         auto interior_index = input("ma_is_interior").get<vec1i>();
         auto ma_radii = input("ma_radii").get<vec1f>();
+        float offset = input("offset").get<float>();
+        float min_z = input("min_z").get<float>();
+
+        
         std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\radii_out.txt";
         std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
         for (float a : ma_radii) 
@@ -84,26 +97,37 @@ namespace geoflow::nodes::mat {
         }
         outfile.close();
 
-        int size = matpoints.size();
+        
         //-----output-----------------//
         PointCollection interior_mat;
+        PointCollection exterior_mat;
         vec1f  interior_radii;
 
-        std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\filtered_radii_out.txt";
-        std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
+        /*std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\filtered_radii_out.txt";
+        std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);*/
+        
 
-        for (int i = 0; i < size; i++) {
-            if (interior_index[i] == 1 && ma_radii[i] < 199)
+        for (int i = 0; i < matpoints.size(); i++) {
+            //if (interior_index[i] == 1 && ma_radii[i] < 199)
+            if (interior_index[i] == 1 && matpoints[i][2]>(min_z- offset))
             {
                 interior_mat.push_back(matpoints[i]);
                 interior_radii.push_back(ma_radii[i]);
-                outfile2 << ma_radii[i] << std::endl;
+                //outfile2 << ma_radii[i] << std::endl;
             }
+            if(interior_index[i]!=1)
+            {
+                exterior_mat.push_back(matpoints[i]);
+            }
+            
         }
 
-        outfile2.close();
-        std::cout << "Number of Mat points filtered:" << interior_mat.size() << std::endl;
+        //outfile2.close();
+        std::cout << "Number of input points:" << matpoints.size() << std::endl;
+        std::cout << "Number of interior MAT points :" << interior_mat.size() << std::endl;
+        std::cout << "Number of exterior MAT points :" << exterior_mat.size() << std::endl;
         output("interior_mat").set(interior_mat);
+        output("exterior_mat").set(exterior_mat);
         output("interior_radii").set(interior_radii);
     }
 
@@ -220,7 +244,7 @@ namespace geoflow::nodes::mat {
 
 
 
-            outfile<< mp_Points[i].pos.x << "," << mp_Points[i].pos.y << "," << mp_Points[i].pos.z << std::endl;
+            outfile<< mp_Points[i].pos.x << "," << mp_Points[i].pos.y << "," << mp_Points[i].pos.z <<","<< mp_Points[i].radius << std::endl;
             allPointsVec.push_back(mp_Points[i]);
         }
         outfile.close();
@@ -229,17 +253,19 @@ namespace geoflow::nodes::mat {
         //center = (*kd).centerofBoundingBox();
        
         //std::cout << "center point of bounding box:" << center.x << "," << center.y << "," << center.z << std::endl;
+        std::cout << "Total number of points in kd-tree"<< allPointsVec.size() << std::endl;
         std::cout<< "number of bounding box:" << (*kd).m_maxpoint.size() << std::endl;
         //std::cout << "Vector size of kdtreepoints:" << (*kd).m_boxKdTreePoint.size() << std::endl;
         std::cout << "size of level:" << (*kd).m_currentlevel.size() << std::endl;
         std::cout << "KDTree output done"<<std::endl;
+       
 
         
         int new_count = 0;
         for (int i = (*kd).m_maxpoint.size()-1 ; i >=0; i--)
         {
 
-            auto levelpoints = BuildKDtree::GetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], allPointsVec); 
+            std::vector<KdTree::sphere> levelpoints = BuildKDtree::GetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], &allPointsVec);
             new_count +=levelpoints.size() ;
             //std::cout <<"Number of points in each level:"<< levelpoints.size() << std::endl;
             (*kd).m_levelpoints.push_back(levelpoints);
@@ -247,7 +273,7 @@ namespace geoflow::nodes::mat {
 
 
         std::cout << "Total level points:" << new_count << std::endl;
-        std::cout << "The size of allPointsVec:" << allPointsVec.size() << std::endl;
+        std::cout << "At the end the size of allPointsVec are:" << allPointsVec.size() << std::endl;
         std::cout << "The size of m_levelpoints:" << (*kd).m_levelpoints.size() << std::endl;
         std::cout << "The size of boxs:" << (*kd).m_maxpoint.size() << std::endl;
 
@@ -265,6 +291,7 @@ namespace geoflow::nodes::mat {
             }
         }
         std::cout << "Correct points:" << flag<<std::endl;
+        std::cout << "Wrong points:" << new_count -flag << std::endl;
         
  
         output("KDTree").set(kd);
@@ -304,28 +331,69 @@ namespace geoflow::nodes::mat {
             mp_Points[i].z = points[i][2];
         }
 
+        std::vector<sphere> visble_sph;
+
         Vector3D v1 = input("Vector1").get<Vector3D>();
 
         auto v2_list = OneQuery::SpherePoints(v1, 500);
-        int vetsize = v2_list.size();
+
+        clock_t starttime, endtime;
+        starttime = clock();
+        auto CutVecList = MutiThreadsOneQuery::CutVecList(v2_list, 4);
+        std::thread t[4];
+
+
+        int Threads_Count = 0;
+        for (std::vector<Vector3D> vec_cut : CutVecList) {
+            t[Threads_Count]=std::thread(MutiThreadsOneQuery::GetQueryResult, vec_cut, v1, kd, std::ref(visble_sph));
+            t[Threads_Count].join();
+            Threads_Count++;
+        }
+
+
+        
+
+
+        ////////////////////////////////
+        /*int vetsize = v2_list.size();
         std::vector<Vector3D> threadvec1;
         std::vector<Vector3D> threadvec2;
+        std::vector<Vector3D> threadvec3;
+        std::vector<Vector3D> threadvec4;
 
 
-        std::for_each(begin(v2_list), begin(v2_list) + 0.5*vetsize, [&threadvec1](Vector3D x) {
+        std::for_each(begin(v2_list), begin(v2_list) + 0.25*vetsize, [&threadvec1](Vector3D x) {
             threadvec1.push_back(x);
         });
-        std::for_each(begin(v2_list) + 0.5*vetsize, end(v2_list), [&threadvec2](Vector3D y) {
+        std::for_each(begin(v2_list) + 0.25*vetsize, begin(v2_list) + 0.5*vetsize, [&threadvec2](Vector3D y) {
             threadvec2.push_back(y);
         });
+        std::for_each(begin(v2_list) + 0.5*vetsize, begin(v2_list) + 0.75*vetsize, [&threadvec3](Vector3D z) {
+            threadvec3.push_back(z);
+        });
+        std::for_each(begin(v2_list) + 0.75*vetsize, end(v2_list) , [&threadvec4](Vector3D v) {
+            threadvec4.push_back(v);
+            
+        });
+
+
         std::cout << "Vector divide done" << std::endl;
 
 
-        std::vector<sphere> visble_sph;
+        
         std::thread t1(MutiThreadsOneQuery::GetQueryResult, threadvec1, v1,kd,std::ref(visble_sph) );
         t1.join();
         std::thread t2(MutiThreadsOneQuery::GetQueryResult, threadvec2, v1, kd, std::ref(visble_sph));
         t2.join();
+        std::thread t3(MutiThreadsOneQuery::GetQueryResult, threadvec3, v1, kd, std::ref(visble_sph));
+        t3.join();
+        std::thread t4(MutiThreadsOneQuery::GetQueryResult, threadvec4, v1, kd, std::ref(visble_sph));
+        t4.join();
+        */
+
+        //////////////////////////////
+        //2739
+
         std::cout << "Multi Threads query done" << std::endl;
         std::cout << "Visble MAT size:" << visble_sph.size() << std::endl;
 
@@ -334,10 +402,11 @@ namespace geoflow::nodes::mat {
             visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
             visible_radii.push_back(item.r);
         }
+        endtime = clock();
         
         output("MAT_points").set(visible_mat);
         output("radii").set(visible_radii);
-
+        std::cout << "Multiple threads running time:" << endtime - starttime << std::endl;
 
     }
 

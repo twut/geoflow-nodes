@@ -25,6 +25,7 @@ namespace geoflow::nodes::mat {
       add_output("ma_radii", typeid(vec1f));
       add_output("ma_qidx", typeid(vec1i));
       add_output("ma_is_interior", typeid(vec1i));
+      add_output("min_z", typeid(float));
     }
     void gui(){
       ImGui::SliderFloat("initial_radius", &params.initial_radius, 0, 1000);
@@ -41,7 +42,10 @@ namespace geoflow::nodes::mat {
           add_input("ma_coords", typeid(PointCollection));
           add_input("ma_is_interior", typeid(vec1i));
           add_input("ma_radii", typeid(vec1f));
+          add_input("offset", typeid(float));
+          add_input("min_z", typeid(float));
           add_output("interior_mat", typeid(PointCollection));
+          add_output("exterior_mat", typeid(PointCollection));
           add_output("interior_radii", typeid(vec1f));
       }
       void process();
@@ -184,29 +188,33 @@ namespace geoflow::nodes::mat {
           return vec_result;
       }
 
-      std::vector<KdTree::sphere> GetLevelPoints(Vector3D max, Vector3D min, std::vector<KdTree::sphere> &points) {
+      std::vector<KdTree::sphere> GetLevelPoints(Vector3D max, Vector3D min, std::vector<KdTree::sphere> *points) {
           std::vector<KdTree::sphere> LevelPoints;
+          
+          
+          std::vector<KdTree::sphere> diff;
           std::vector<KdTree::sphere>::iterator it;
-          for (auto a:points){
+          for (auto a:*points){
               if(a.pos.x<=max.x&&a.pos.x>=min.x)
                   if(a.pos.y<=max.y&&a.pos.y>=min.y)
                       if (a.pos.z <= max.z&&a.pos.z >= min.z) {
 
                           LevelPoints.push_back(a);
-                          for (it = points.begin(); it != points.end();) {
+                          for (it = (*points).begin(); it != (*points).end();) {
                               if ((*it).pos == a.pos)
-                                  it = points.erase(it);
+                                  it = (*points).erase(it);
                               else
                               {
-                                  it++;
+                                  ++it;
                               }
                           }
                       }
               
           }
-
-
-
+          
+          /*it = std::set_difference((*points).begin(), (*points).end(), LevelPoints.begin(), LevelPoints.end(), diff.begin());
+          diff.resize(it - diff.begin());
+          *points = diff;*/
           return LevelPoints;
       
       }
@@ -300,6 +308,22 @@ namespace geoflow::nodes::mat {
       void process() {         
           output("result").set(float(param<int>("number_value")));        
       }
+  };
+  class OffsetNode:public Node {
+  public:
+      using Node::Node;
+      void init() {
+          add_output("Numfloat", typeid(float));
+          add_param("float_value", (float)0.5);
+      }
+      void gui() {
+          ImGui::InputFloat("Num", &param<float>("float_value"));
+      }
+      void process() {
+          float num = param<float>("float_value");
+          output("Numfloat").set(num);
+      }
+
   };
   class ViewPoint :public Node {
   public:
@@ -494,6 +518,23 @@ namespace geoflow::nodes::mat {
           add_output("MAT_points", typeid(PointCollection));
           add_output("radii", typeid(vec1f));
       }
+      static std::vector<std::vector<Vector3D>> CutVecList(std::vector<Vector3D> vecList, int CutNum) {
+          std::vector<std::vector<Vector3D>> OutVecList;
+          float interval = 1.0 / CutNum;
+          float interval_size = interval * vecList.size();;
+          
+          for (int i = 0; i < CutNum; i++) {
+              std::vector<Vector3D> TemVecList;
+              
+              std::for_each(begin(vecList)+(i*interval_size), begin(vecList) + ((i+1)*interval_size), [&TemVecList](Vector3D x) {
+                  TemVecList.push_back(x);
+              }); 
+
+              OutVecList.push_back(TemVecList);       
+          
+          }
+          return OutVecList;
+      }
       
       static float PointToPointDis(Vector3D p1, Vector3D p2) {
           float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
@@ -563,13 +604,14 @@ namespace geoflow::nodes::mat {
               }
               if (pointlist.size() > 0) {
                   //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;
-                  float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
+                  //float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
+                  float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]) -radiilist[0];
                   
                   int flag = 0;
                   for (int i = 0; i < pointlist.size(); i++)
                   {
-                      //float temp = OneQuery::PointToPointDis(v1, pointlist[i]) - radiilist[i];
-                      float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]);
+                      float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]) - radiilist[i];
+                      //float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]);
                       if (temp < minDis) {
                           minDis = temp;
                           flag = i;
@@ -652,7 +694,7 @@ namespace geoflow::nodes::mat {
        static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
           std::vector<Vector3D> points;
           Vector3D point;
-          int nLongitude = 100;
+          int nLongitude = 500;
           int nLatitude = 2 * nLongitude;
           int p, s, i, j;
           float x, y, z, out;
