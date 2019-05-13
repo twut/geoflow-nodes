@@ -19,6 +19,7 @@ namespace geoflow::nodes::mat {
     R->register_node<MultiKDtree>("MultiKDtree");
     R->register_node<OneQuery>("Onequery");
     R->register_node<MutiThreadsOneQuery>("MultiThreadsQuery");
+    R->register_node<AMPGPUQueryTest>("GPUQuery");
     return R;
   }
 

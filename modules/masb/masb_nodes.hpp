@@ -1,14 +1,18 @@
 #include <geoflow/core/geoflow.hpp>
 #include"kdTree.h"
+#include "Vector3DNew.h"
 #include <compute_ma_processing.h>
 #include <compute_normals_processing.h>
 #include <thread>
 #include <mutex>
+#include <amp.h>
+#include<amp_math.h>
 
 # define M_PI           3.14159265358979323846 
 
 
 namespace geoflow::nodes::mat {
+   
 
   static std::mutex mtx;
 
@@ -245,13 +249,14 @@ namespace geoflow::nodes::mat {
           add_output("Radii_of_MAT", typeid(vec1f));
       }
       void process();
-      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
+      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)// restrict(cpu,amp)
       {
-          float ab = sqrt(pow((a.x - b.x), 2.0) + pow((a.y - b.y), 2.0) + pow((a.z - b.z), 2.0));
-          float as = sqrt(pow((a.x - s.x), 2.0) + pow((a.y - s.y), 2.0) + pow((a.z - s.z), 2.0));
-          float bs = sqrt(pow((s.x - b.x), 2.0) + pow((s.y - b.y), 2.0) + pow((s.z - b.z), 2.0));
-          float cos_A = (pow(as, 2.0) + pow(ab, 2.0) - pow(bs, 2.0)) / (2 * ab*as);
-          float sin_A = sqrt(1 - pow(cos_A, 2.0));
+          //concurrency::precise_math::
+          float ab = sqrt(pow((a.x - b.x), 2.0f) + pow((a.y - b.y), 2.0f) + pow((a.z - b.z), 2.0f));
+          float as = sqrt(pow((a.x - s.x), 2.0f) +pow((a.y - s.y), 2.0f) + pow((a.z - s.z), 2.0f));
+          float bs = sqrt(pow((s.x - b.x), 2.0f) + pow((s.y - b.y), 2.0f) +pow((s.z - b.z), 2.0f));
+          float cos_A = (pow(as, 2.0f) + pow(ab, 2.0f) - pow(bs, 2.0f)) / (2.0f * ab*as);
+          float sin_A = sqrt(1.0f - pow(cos_A, 2.0f));
           return as * sin_A;
       }
 
@@ -496,6 +501,257 @@ namespace geoflow::nodes::mat {
       }
 
   };
+ 
+  class AMPGPUQueryTest :public Node {
+  public:
+      using Node::Node;
+      
+      struct  sphere 
+      {
+          Vector3D pos;
+          float r;
+      };
+      void init() {
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
+          add_input("Vector1", typeid(Vector3D));
+
+          add_output("MAT_points", typeid(PointCollection));
+          add_output("radii", typeid(vec1f));
+      }
+      
+      static float PointToPointDis(Vector3DNew p1, Vector3DNew p2) restrict(amp,cpu)
+      {
+          float dis = concurrency::precise_math::sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
+          return dis;
+      }
+
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3DNew P1, Vector3DNew P2, Vector3DNew &Hit)  restrict(cpu, amp)
+      {
+          
+          if ((fDst1 * fDst2) >= 0.0f) return 0;
+          if (fDst1 == fDst2) return 0;
+          Hit.x = P1.x + (P2.x - P1.x) * (-fDst1 / (fDst2 - fDst1));
+          Hit.y = P1.y + (P2.y - P1.y) * (-fDst1 / (fDst2 - fDst1));
+          Hit.z = P1.z + (P2.z - P1.z) * (-fDst1 / (fDst2 - fDst1));
+          return 1;
+      }
+
+      static int inline InBox (Vector3DNew Hit, Vector3DNew B1, Vector3DNew B2, const int Axis)  restrict(cpu, amp)
+      {
+          if (Axis == 1 && Hit.z > B1.z && Hit.z < B2.z && Hit.y > B1.y && Hit.y < B2.y) return 1;
+          if (Axis == 2 && Hit.z > B1.z && Hit.z < B2.z && Hit.x > B1.x && Hit.x < B2.x) return 1;
+          if (Axis == 3 && Hit.x > B1.x && Hit.x < B2.x && Hit.y > B1.y && Hit.y < B2.y) return 1;
+          return 0;
+      }
+      static int CheckLineBox(Vector3DNew B1, Vector3DNew B2, Vector3DNew L1, Vector3DNew L2, Vector3DNew &Hit)  restrict(cpu, amp)
+      {
+          if (L2.x < B1.x && L1.x < B1.x) return false;
+          if (L2.x > B2.x && L1.x > B2.x) return false;
+          if (L2.y < B1.y && L1.y < B1.y) return false;
+          if (L2.y > B2.y && L1.y > B2.y) return false;
+          if (L2.z < B1.z && L1.z < B1.z) return false;
+          if (L2.z > B2.z && L1.z > B2.z) return false;
+          if (L1.x > B1.x && L1.x < B2.x &&
+              L1.y > B1.y && L1.y < B2.y &&
+              L1.z > B1.z && L1.z < B2.z)
+          {
+              Hit = L1;
+              return 1;
+          }
+          if (GetIntersection(L1.x - B1.x, L2.x - B1.x, L1, L2, Hit)&&(InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1.y - B1.y, L2.y - B1.y, L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1.z - B1.z, L2.z - B1.z, L1, L2, Hit) && InBox(Hit, B1, B2, 3))
+              || (GetIntersection(L1.x - B2.x, L2.x - B2.x, L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1.y - B2.y, L2.y - B2.y, L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1.z - B2.z, L2.z - B2.z, L1, L2, Hit) && InBox(Hit, B1, B2, 3)))
+              return true;   
+
+          return false;
+      }
+      static float DistanceOfPointToLine(Vector3DNew a, Vector3DNew b, Vector3DNew s)restrict(amp,cpu)
+      {
+          //concurrency::precise_math::
+          float ab = concurrency::precise_math::sqrt(concurrency::precise_math::pow((a.x - b.x), 2.0f) + concurrency::precise_math::pow((a.y - b.y), 2.0f) + concurrency::precise_math::pow((a.z - b.z), 2.0f));
+          float as = concurrency::precise_math::sqrt(concurrency::precise_math::pow((a.x - s.x), 2.0f) + concurrency::precise_math::pow((a.y - s.y), 2.0f) + concurrency::precise_math::pow((a.z - s.z), 2.0f));
+          float bs = concurrency::precise_math::sqrt(concurrency::precise_math::pow((s.x - b.x), 2.0f) + concurrency::precise_math::pow((s.y - b.y), 2.0f) + concurrency::precise_math::pow((s.z - b.z), 2.0f));
+          float cos_A = (concurrency::precise_math::pow(as, 2.0f) + concurrency::precise_math::pow(ab, 2.0f) - concurrency::precise_math::pow(bs, 2.0f)) / (2.0f * ab*as);
+          float sin_A = concurrency::precise_math::sqrt(1.0f - concurrency::precise_math::pow(cos_A, 2.0f));
+          return as * sin_A;
+      }
+      
+      
+
+      static void GPUQuery(std::vector<Vector3DNew> v2, Vector3DNew v1,int size, KdTree *kd,  std::vector<int> &IfIntersect)
+      {
+          int levelsize = (*kd).m_maxpoint.size();
+
+          std::vector<Vector3DNew> new_m_maxpoint;
+          std::vector<Vector3DNew> new_m_minpoint;
+          for (auto a : (*kd).m_maxpoint) 
+          {
+              Vector3DNew new_a(a);
+              new_m_maxpoint.push_back(new_a);
+          }
+
+          for (auto a2 : (*kd).m_minpoint)
+          {
+              Vector3DNew new_a2(a2);
+              new_m_minpoint.push_back(new_a2);
+          }
+
+          //v1 is the viewpoint
+          concurrency::array_view<Vector3DNew, 1> v1_av(size);
+          for (int i = 0; i < size; i++) 
+          {
+              v1_av[i] = v1;
+          }
+          
+          
+          // bv is the vector of input target
+          concurrency::array_view<Vector3DNew,1> v2_av(size, v2);
+          
+          concurrency::array_view<Vector3DNew,1> pointlist(levelsize);
+          concurrency::array_view<float,1> radiilist(levelsize);
+
+          concurrency::array_view<Vector3DNew,1> kd_maxpoint(levelsize, new_m_maxpoint);
+          concurrency::array_view<Vector3DNew,1> kd_minpoint(levelsize, new_m_minpoint);
+          concurrency::array_view<Vector3DNew, 1> hit_av(size);
+
+
+          //concurrency::array_view<KdTree::sphere, 1> kd_levelpoints(levelsize,50);
+          
+          //concurrency::array_view<int> kd_levelpoint_size(levelsize);
+          /*for (int i = 0; i < levelsize; i++) 
+              for (int j = 0; j < 50; j++) 
+              {
+                  kd_levelpoints[i *
+              }*/
+          /*for(int i =0;i<levelsize;i++)
+          {
+              for (int j = 0; j < (*kd).m_levelpoints[i].size();j++) 
+              {
+                  kd_levelpoints[i * 50 + j] = (*kd).m_levelpoints[i][j];
+              }
+          }*/
+
+          
+
+          //for (int i = 0; i < levelsize; i++) 
+          //{
+          //    kd_levelpoint_size[i] = (*kd).m_levelpoints[i].size();
+          //}
+
+
+          //result bool if intersect
+          concurrency::array_view<int, 1> result_av(size);
+          for (int i = 0; i < size; i++) 
+          {
+              result_av[i] = 0;
+          }
+          
+
+          
+          concurrency::parallel_for_each(v2_av.extent,
+              [v1_av, v2_av, kd_maxpoint, kd_minpoint,levelsize, hit_av, result_av](concurrency::index<1> idx) restrict(amp)
+          {    
+              int flag = 0;          
+              for (int i = 0; i < levelsize; i++) 
+              {
+                  
+                  flag = AMPGPUQueryTest::CheckLineBox(kd_minpoint[i],kd_maxpoint[i],v1_av[idx],v2_av[idx],hit_av[idx]);
+                  if (flag == 1) 
+                  {   
+                      result_av[idx] = 1;     
+                      /*int index_mark = 0;  
+                      for (int j = 0; j < 50; j++) {
+                          if (kd_levelpoints[i * 50 + j].radius != NULL) 
+                          {
+                              
+                              float minDis = AMPGPUQueryTest::PointToPointDis(v1_av[idx],kd_levelpoints[0].pos) - kd_levelpoints[0].radius;
+                              
+
+                              float dis = AMPGPUQueryTest::DistanceOfPointToLine(v1_av[idx], v2_av[idx], kd_levelpoints[i * 50 + j].pos);
+
+                              float temp_dis = AMPGPUQueryTest::PointToPointDis(v1_av[idx], kd_levelpoints[i * 50 + j].pos) - kd_levelpoints[i * 50 + j].radius;
+                              if (dis < kd_levelpoints[i * 50 + j].radius)
+                                  if (temp_dis < minDis)
+                                  {
+                                      minDis = temp_dis;
+                                      index_mark = i * 50 + j;
+
+                                  }
+                          };
+
+                      }
+                      pointlist[i].x = kd_levelpoints[index_mark].pos.x;
+                      pointlist[i].y = kd_levelpoints[index_mark].pos.y;
+                      pointlist[i].z = kd_levelpoints[index_mark].pos.z;
+                      radiilist[i] = kd_levelpoints[index_mark].radius;*/
+             
+                  }
+                  
+                  break;
+                  
+              }
+          });
+          result_av.synchronize();
+          
+
+          for (int i = 0; i < size; i++) 
+          {
+              IfIntersect.push_back(result_av[i]);
+          }
+          
+          
+      }
+
+      static AMPGPUQueryTest::sphere GetOneLineResult(Vector3D v1, Vector3D v2,KdTree *kd)
+      {                       
+          AMPGPUQueryTest::sphere result;
+          std::vector<Vector3D> pointlist;
+          std::vector<float> radiilist;
+          Vector3DNew hit;
+          int count = 0;
+          for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+              bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
+              if (a == 1) {
+                  for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+                      count++;
+                      float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
+                      if (dis <= pt.radius) {
+                          pointlist.push_back(pt.pos);
+                          radiilist.push_back(pt.radius);
+                      }
+                  }
+              }
+          }
+          if (pointlist.size() > 0) {
+              //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;
+              //float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
+              float minDis = AMPGPUQueryTest::PointToPointDis(v1, pointlist[0]) - radiilist[0];
+
+              int flag = 0;
+              for (int i = 0; i < pointlist.size(); i++)
+              {
+                  float temp = AMPGPUQueryTest::PointToPointDis(v1, pointlist[i]) - radiilist[i];
+                  //float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]);
+                  if (temp < minDis) {
+                      minDis = temp;
+                      flag = i;
+                  }
+              }
+              result.pos = { pointlist[flag].x,pointlist[flag].y,pointlist[flag].z };
+              result.r = radiilist[flag];
+              
+              
+          }
+          return result;
+
+      };
+      void process();
+  };
   
   class MutiThreadsOneQuery :public Node {
   public:
@@ -541,20 +797,22 @@ namespace geoflow::nodes::mat {
           return dis;
       }
 
-      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) {
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) 
+      {
           if ((fDst1 * fDst2) >= 0.0f) return 0;
           if (fDst1 == fDst2) return 0;
           Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
           return 1;
       }
 
-      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis) {
+      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis)  
+      {
           if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
           if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
           if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
           return 0;
       }
-      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit) 
       {
           if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
           if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
@@ -583,7 +841,8 @@ namespace geoflow::nodes::mat {
       static void GetQueryResult(std::vector<Vector3D> vecList, Vector3D v1, KdTree *kd, std::vector<MutiThreadsOneQuery::sphere> &visble_sph) {
           
           
-          for (Vector3D v2 : vecList) {
+          for (Vector3D v2 : vecList) 
+          {
               MutiThreadsOneQuery::sphere result;
               std::vector<Vector3D> pointlist;
               std::vector<float> radiilist;

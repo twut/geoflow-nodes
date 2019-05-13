@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <thread>
 #include <time.h>
+#include<amp.h>
 
 
 
@@ -158,7 +159,7 @@ namespace geoflow::nodes::mat {
 
     
     void MultiKDtree::process() {
-        auto point_collection = input("points").get<PointCollection>();
+       /* auto point_collection = input("points").get<PointCollection>();
         masb::ma_data madata;
         madata.m = point_collection.size();
         auto number = point_collection.size();
@@ -195,7 +196,7 @@ namespace geoflow::nodes::mat {
         KdTree* kd2 = NewBuildKdTree(m_Points2, count2);
         
         output("KDTree1").set(kd1);
-        output("KDTree2").set(kd2);
+        output("KDTree2").set(kd2);*/
     }
 
     void BuildKDtree::process()
@@ -249,7 +250,7 @@ namespace geoflow::nodes::mat {
         }
         outfile.close();
         
-        KdTree* kd = BuildKdTree(Points, m_nPoints,20);       
+        KdTree* kd = BuildKDtree::BuildKdTree(Points, m_nPoints,20);
         //center = (*kd).centerofBoundingBox();
        
         //std::cout << "center point of bounding box:" << center.x << "," << center.y << "," << center.z << std::endl;
@@ -296,6 +297,103 @@ namespace geoflow::nodes::mat {
  
         output("KDTree").set(kd);
         
+    }
+    void AMPGPUQueryTest::process() {
+
+        clock_t starttime, endtime;
+        starttime = clock();
+
+        //----------------input------------------------//
+        std::cout << "Mutiple Threads Query start" << std::endl;
+        auto kd = input("KDTree").get<KdTree*>();
+        auto point_collection = input("MATpoints").get<PointCollection>();
+        auto radii = input("radii").get<vec1f>();
+        // -------------output----------------------//
+        PointCollection visible_mat;
+        vec1f visible_radii;
+
+        // -------------------------------------//
+        masb::ma_data madata;
+        madata.m = point_collection.size();
+        int number = point_collection.size();
+        std::cout << "MAT point size:" << madata.m << std::endl;
+
+
+        Vector3D* mp_Points = new Vector3D[number];
+
+
+
+
+        vec3f points;
+        points.reserve(madata.m);
+        for (auto& p : point_collection) {
+            points.push_back({ p[0], p[1], p[2] });
+        }
+        for (int i = 0; i < number; i++) {
+            mp_Points[i].x = points[i][0];
+            mp_Points[i].y = points[i][1];
+            mp_Points[i].z = points[i][2];
+        }
+
+        std::vector<AMPGPUQueryTest::sphere> visble_sph;
+
+        Vector3D v1 = input("Vector1").get<Vector3D>();
+        Vector3DNew v1_new(v1);
+
+        std::vector<Vector3D> v2_list = OneQuery::SpherePoints(v1, 500);
+        int linesize = v2_list.size();
+
+        std::vector<Vector3DNew> v2_new;
+        for (auto a : v2_list) 
+        {
+            Vector3DNew new_a(a);
+            v2_new.push_back(new_a);
+        }
+        std::vector<int> result;
+
+        
+        //run the query function here
+
+        AMPGPUQueryTest::GPUQuery(v2_new, v1_new, linesize, kd, result);
+
+        
+        std::cout << "GPU query done" << std::endl;
+
+        int GPU_box_check_count = 0;
+
+        for (int i = 0; i < result.size();i++) {
+            if (result[i] == 1) 
+            { 
+                GPU_box_check_count++;
+                auto sph1 = AMPGPUQueryTest::GetOneLineResult(v1,v2_list[i],kd);
+
+                visble_sph.push_back(sph1);
+
+            }
+            
+        }
+        std::cout << "!!!!!!!!!" << GPU_box_check_count << std::endl;
+        
+        
+                              
+        
+
+
+
+        //std::cout << "Visble MAT size:" << visble_sph.size() << std::endl;
+
+        
+
+        for (auto item : visble_sph) {
+            visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
+            visible_radii.push_back(item.r);
+        }
+        endtime = clock();
+
+        output("MAT_points").set(visible_mat);
+        output("radii").set(visible_radii);
+        std::cout << "GPUNode running time:" << endtime - starttime << std::endl;
+
     }
 
     void MutiThreadsOneQuery::process() {
