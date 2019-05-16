@@ -90,9 +90,9 @@ namespace geoflow::nodes::mat {
         float min_z = input("min_z").get<float>();
 
         
-        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\radii_out.txt";
+        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\ma_is_interior.txt";
         std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
-        for (float a : ma_radii) 
+        for (auto a : interior_index)
         {
             outfile << a << std::endl;
         }
@@ -103,33 +103,46 @@ namespace geoflow::nodes::mat {
         PointCollection interior_mat;
         PointCollection exterior_mat;
         vec1f  interior_radii;
+        vec1i interior_idx;
+        vec1f  exterior_radii;
+        vec1i exterior_idx;
 
-        /*std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\filtered_radii_out.txt";
-        std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);*/
+        std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\ex_indices_out.txt";
+        std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
         
 
-        for (int i = 0; i < matpoints.size(); i++) {
-            //if (interior_index[i] == 1 && ma_radii[i] < 199)
-            if (interior_index[i] == 1 && matpoints[i][2]>(min_z- offset))
+        for (int i = 0; i < matpoints.size(); i++) 
+        {
+            if (interior_index[i] == 1 )
+            //if (interior_index[i] == 1 && matpoints[i][2]>(min_z- offset))
             {
                 interior_mat.push_back(matpoints[i]);
                 interior_radii.push_back(ma_radii[i]);
+                interior_idx.push_back(i);
                 //outfile2 << ma_radii[i] << std::endl;
             }
-            if(interior_index[i]!=1)
+            if(interior_index[i]==0)
             {
                 exterior_mat.push_back(matpoints[i]);
+                exterior_radii.push_back(ma_radii[i]);
+                exterior_idx.push_back(i-0.5*matpoints.size());
+                outfile2 << i - 0.5*matpoints.size() << std::endl;
             }
             
         }
 
-        //outfile2.close();
+        outfile2.close();
+
         std::cout << "Number of input points:" << matpoints.size() << std::endl;
         std::cout << "Number of interior MAT points :" << interior_mat.size() << std::endl;
         std::cout << "Number of exterior MAT points :" << exterior_mat.size() << std::endl;
-        output("interior_mat").set(interior_mat);
-        output("exterior_mat").set(exterior_mat);
+        output("interior_mat").set(interior_mat);        
         output("interior_radii").set(interior_radii);
+        output("interior_idx").set(interior_idx);
+
+        output("exterior_mat").set(exterior_mat);
+        output("exterior_radii").set(exterior_radii);
+        output("exterior_idx").set(exterior_idx);
     }
 
     void ComputeNormalsNode::process() {
@@ -203,6 +216,8 @@ namespace geoflow::nodes::mat {
     {
         auto point_collection = input("points").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
+        auto indice = input("indice").get<vec1i>();
+
         masb::ma_data madata;
         madata.m = point_collection.size();
         m_nPoints = point_collection.size();
@@ -237,6 +252,7 @@ namespace geoflow::nodes::mat {
             mp_Points[i].pos.y = points[i][1];
             mp_Points[i].pos.z = points[i][2];
             mp_Points[i].radius = radii[i];
+            mp_Points[i].index = indice[i];
 
             Points[i].x = points[i][0];
             Points[i].y = points[i][1];
@@ -304,13 +320,16 @@ namespace geoflow::nodes::mat {
         starttime = clock();
 
         //----------------input------------------------//
-        std::cout << "Mutiple Threads Query start" << std::endl;
+        std::cout << "GPU query start" << std::endl;
         auto kd = input("KDTree").get<KdTree*>();
         auto point_collection = input("MATpoints").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
+        auto indice = input("indice").get<vec1i>();
+
         // -------------output----------------------//
         PointCollection visible_mat;
         vec1f visible_radii;
+        vec1i visible_indice;
 
         // -------------------------------------//
         masb::ma_data madata;
@@ -335,7 +354,7 @@ namespace geoflow::nodes::mat {
             mp_Points[i].z = points[i][2];
         }
 
-        std::vector<AMPGPUQueryTest::sphere> visble_sph;
+        std::vector<KdTree::sphere> visble_sph;
 
         Vector3D v1 = input("Vector1").get<Vector3D>();
         Vector3DNew v1_new(v1);
@@ -357,24 +376,38 @@ namespace geoflow::nodes::mat {
         AMPGPUQueryTest::GPUQuery(v2_new, v1_new, linesize, kd, result);
 
         
-        std::cout << "GPU query done" << std::endl;
+        //std::cout << "GPU query starts" << std::endl;
 
         int GPU_box_check_count = 0;
+
+        std::vector<Vector3D> v2_intersected;
 
         for (int i = 0; i < result.size();i++) {
             if (result[i] == 1) 
             { 
+
+                //v2_intersected.push_back(v2_list[i]);
+                
                 GPU_box_check_count++;
+                
                 auto sph1 = AMPGPUQueryTest::GetOneLineResult(v1,v2_list[i],kd);
-
                 visble_sph.push_back(sph1);
-
             }
             
         }
-        std::cout << "!!!!!!!!!" << GPU_box_check_count << std::endl;
+        std::cout << "Number of intersected directions:" << GPU_box_check_count << std::endl;
+        //---------------Mutiple Threads-----------------------//        
+       /* auto CutVecList = MutiThreadsOneQuery::CutVecList(v2_intersected, 4);
         
-        
+        std::thread t[4];
+
+
+        int Threads_Count = 0;
+        for (std::vector<Vector3D> vec_cut : CutVecList) {
+            t[Threads_Count] = std::thread(AMPGPUQueryTest::GetQueryResult, vec_cut, v1, kd, std::ref(visble_sph));
+            t[Threads_Count].join();
+            Threads_Count++;
+        }*/
                               
         
 
@@ -386,12 +419,14 @@ namespace geoflow::nodes::mat {
 
         for (auto item : visble_sph) {
             visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
-            visible_radii.push_back(item.r);
+            visible_radii.push_back(item.radius);
+            visible_indice.push_back(item.index);
         }
         endtime = clock();
 
         output("MAT_points").set(visible_mat);
         output("radii").set(visible_radii);
+        output("indice").set(visible_indice);
         std::cout << "GPUNode running time:" << endtime - starttime << std::endl;
 
     }
@@ -438,6 +473,8 @@ namespace geoflow::nodes::mat {
         clock_t starttime, endtime;
         starttime = clock();
         auto CutVecList = MutiThreadsOneQuery::CutVecList(v2_list, 4);
+
+
         std::thread t[4];
 
 

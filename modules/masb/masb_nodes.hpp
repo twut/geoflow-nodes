@@ -15,6 +15,41 @@ namespace geoflow::nodes::mat {
    
 
   static std::mutex mtx;
+  class FromMATtoPointCloud :public Node {
+  public:
+      using Node::Node;
+      void init() 
+      { 
+          add_input("points", typeid(PointCollection));
+          //add_input("Visible_MAT", typeid(PointCollection));
+
+          //add_input("ma_qidx", typeid(vec1i));
+          add_input("vis_idx", typeid(vec1i));
+          
+
+          add_output("Vis_points", typeid(PointCollection));
+      }
+      void gui() 
+      {
+      }
+      void process() 
+      {
+          // ---------------input -------------------//
+          auto input_points = input("points").get<PointCollection>();
+          auto vis_idx = input("vis_idx").get<vec1i>();
+          //---------------output ---------------//
+          PointCollection output_points;
+          
+          for (int idx : vis_idx)
+          {
+              //std::cout << idx << std::endl;
+              output_points.push_back(input_points[idx]);
+          }
+
+          output("Vis_points").set(output_points);         
+      }
+
+  };
 
   class ComputeMedialAxisNode:public Node {
     public:
@@ -29,7 +64,7 @@ namespace geoflow::nodes::mat {
       add_output("ma_radii", typeid(vec1f));
       add_output("ma_qidx", typeid(vec1i));
       add_output("ma_is_interior", typeid(vec1i));
-      add_output("min_z", typeid(float));
+      add_output("min_z", typeid(float));      
     }
     void gui(){
       ImGui::SliderFloat("initial_radius", &params.initial_radius, 0, 1000);
@@ -47,10 +82,15 @@ namespace geoflow::nodes::mat {
           add_input("ma_is_interior", typeid(vec1i));
           add_input("ma_radii", typeid(vec1f));
           add_input("offset", typeid(float));
-          add_input("min_z", typeid(float));
-          add_output("interior_mat", typeid(PointCollection));
+          add_input("min_z", typeid(float));          
+          
           add_output("exterior_mat", typeid(PointCollection));
+          add_output("exterior_radii", typeid(vec1f));
+          add_output("exterior_idx", typeid(vec1i));
+
+          add_output("interior_mat", typeid(PointCollection));
           add_output("interior_radii", typeid(vec1f));
+          add_output("interior_idx", typeid(vec1i));
       }
       void process();
 
@@ -87,7 +127,7 @@ namespace geoflow::nodes::mat {
       static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
           std::vector<Vector3D> points;
           Vector3D point;
-          int nLongitude = 100;
+          int nLongitude = 1000;
           int nLatitude = 2 * nLongitude;
           int p, s, i, j;
           float x, y, z, out;
@@ -226,6 +266,7 @@ namespace geoflow::nodes::mat {
       void init() {
           add_input("points", typeid(PointCollection));
           add_input("radii", typeid(vec1f));
+          add_input("indice", typeid(vec1i));
           add_output("KDTree", typeid(KdTree));
          
 
@@ -249,7 +290,7 @@ namespace geoflow::nodes::mat {
           add_output("Radii_of_MAT", typeid(vec1f));
       }
       void process();
-      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)// restrict(cpu,amp)
+      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
       {
           //concurrency::precise_math::
           float ab = sqrt(pow((a.x - b.x), 2.0f) + pow((a.y - b.y), 2.0f) + pow((a.z - b.z), 2.0f));
@@ -383,7 +424,8 @@ namespace geoflow::nodes::mat {
           auto radii = input("radii").get<vec1f>();
           TriangleCollection all_tc;
           vec3f all_normals;
-
+                                              
+          ///////////////////
           for (int i = 0; i < mat_points.size(); i++) {
               
               auto  tc= Triangulation::StandardSphere(mat_points[i], radii[i]);
@@ -397,12 +439,17 @@ namespace geoflow::nodes::mat {
           output("triangle_collection").set(all_tc);
           output("normals").set(all_normals);
       };
+
       
-      geoflow::TriangleCollection StandardSphere(geoflow::arr3f center, float radius) {
+      geoflow::TriangleCollection StandardSphere(geoflow::arr3f center, float radius) 
+      {
+
+          //// 10
+          //// [11][21]
           geoflow::Triangle t1,t2;
           geoflow::TriangleCollection tc;
-          int Density = 10;
-          std::array<float, 3> points[11][21];
+          int Density = 8;
+          std::array<float, 3> points[9][17];
           //std::cout << "start triangulation" << std::endl;
           //std::cout << "debug test" << std::endl;
           for (int t = 0; t <= Density; t++)
@@ -515,10 +562,12 @@ namespace geoflow::nodes::mat {
           add_input("KDTree", typeid(KdTree));
           add_input("MATpoints", typeid(PointCollection));
           add_input("radii", typeid(vec1f));
+          add_input("indice", typeid(vec1i));
           add_input("Vector1", typeid(Vector3D));
 
           add_output("MAT_points", typeid(PointCollection));
           add_output("radii", typeid(vec1f));
+          add_output("indice", typeid(vec1i));
       }
       
       static float PointToPointDis(Vector3DNew p1, Vector3DNew p2) restrict(amp,cpu)
@@ -706,12 +755,60 @@ namespace geoflow::nodes::mat {
           
           
       }
+      static void AMPGPUQueryTest::GetQueryResult(std::vector<Vector3D> vecList, Vector3D v1, KdTree *kd, std::vector<KdTree::sphere> &visble_sph) 
+      {
+          for (Vector3D v2 : vecList)
+          {
+              KdTree::sphere result;
+              std::vector<Vector3D> pointlist;
+              std::vector<float> radiilist;
+              Vector3D hit;
+              int count = 0;
+              for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+                  bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
+                  if (a == 1) {
+                      for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+                          count++;
+                          float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
+                          if (dis <= pt.radius) {
+                              pointlist.push_back(pt.pos);
+                              radiilist.push_back(pt.radius);
+                          }
+                      }
+                  }
+              }
+              if (pointlist.size() > 0) {
+                  //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;
+                  //float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
+                  float minDis = AMPGPUQueryTest::PointToPointDis(v1, pointlist[0]) - radiilist[0];
 
-      static AMPGPUQueryTest::sphere GetOneLineResult(Vector3D v1, Vector3D v2,KdTree *kd)
+                  int flag = 0;
+                  for (int i = 0; i < pointlist.size(); i++)
+                  {
+                      float temp = AMPGPUQueryTest::PointToPointDis(v1, pointlist[i]) - radiilist[i];
+                      //float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]);
+                      if (temp < minDis) {
+                          minDis = temp;
+                          flag = i;
+                      }
+                  }
+                  result.pos = { pointlist[flag].x,pointlist[flag].y,pointlist[flag].z };
+                  result.radius = radiilist[flag];
+                  //std::cout << "result :" << result.pos.x<<"," << result.pos.y<<","<< result.pos.z<< std::endl;
+                  mtx.lock();
+                  visble_sph.push_back(result);
+                  mtx.unlock();
+              }
+          }
+
+      };
+
+      static KdTree::sphere GetOneLineResult(Vector3D v1, Vector3D v2,KdTree *kd)
       {                       
-          AMPGPUQueryTest::sphere result;
+          KdTree::sphere result;
           std::vector<Vector3D> pointlist;
           std::vector<float> radiilist;
+          std::vector<int> indice;
           Vector3DNew hit;
           int count = 0;
           for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
@@ -723,6 +820,7 @@ namespace geoflow::nodes::mat {
                       if (dis <= pt.radius) {
                           pointlist.push_back(pt.pos);
                           radiilist.push_back(pt.radius);
+                          indice.push_back(pt.index);
                       }
                   }
               }
@@ -743,7 +841,8 @@ namespace geoflow::nodes::mat {
                   }
               }
               result.pos = { pointlist[flag].x,pointlist[flag].y,pointlist[flag].z };
-              result.r = radiilist[flag];
+              result.radius = radiilist[flag];
+              result.index = indice[flag];
               
               
           }
@@ -751,6 +850,52 @@ namespace geoflow::nodes::mat {
 
       };
       void process();
+      //--------------------   overload -----------------------//
+      static float PointToPointDis(Vector3D p1, Vector3D p2) {
+          float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
+          return dis;
+      }
+
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit)
+      {
+          if ((fDst1 * fDst2) >= 0.0f) return 0;
+          if (fDst1 == fDst2) return 0;
+          Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
+          return 1;
+      }
+
+      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis)
+      {
+          if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
+          if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          return 0;
+      }
+      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      {
+          if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
+          if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
+          if (L2[1] < B1[1] && L1[1] < B1[1]) return false;
+          if (L2[1] > B2[1] && L1[1] > B2[1]) return false;
+          if (L2[2] < B1[2] && L1[2] < B1[2]) return false;
+          if (L2[2] > B2[2] && L1[2] > B2[2]) return false;
+          if (L1[0] > B1[0] && L1[0] < B2[0] &&
+              L1[1] > B1[1] && L1[1] < B2[1] &&
+              L1[2] > B1[2] && L1[2] < B2[2])
+          {
+              Hit = L1;
+              return true;
+          }
+          if ((GetIntersection(L1[0] - B1[0], L2[0] - B1[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B1[1], L2[1] - B1[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B1[2], L2[2] - B1[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3))
+              || (GetIntersection(L1[0] - B2[0], L2[0] - B2[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B2[1], L2[1] - B2[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B2[2], L2[2] - B2[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3)))
+              return true;
+
+          return false;
+      }
   };
   
   class MutiThreadsOneQuery :public Node {
@@ -953,7 +1098,7 @@ namespace geoflow::nodes::mat {
        static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
           std::vector<Vector3D> points;
           Vector3D point;
-          int nLongitude = 500;
+          int nLongitude =500;
           int nLatitude = 2 * nLongitude;
           int p, s, i, j;
           float x, y, z, out;
