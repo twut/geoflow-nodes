@@ -64,10 +64,10 @@ namespace geoflow::nodes::mat {
       add_output("ma_radii", typeid(vec1f));
       add_output("ma_qidx", typeid(vec1i));
       add_output("ma_is_interior", typeid(vec1i));
-      add_output("min_z", typeid(float));      
+      //add_output("min_z", typeid(float));      
     }
     void gui(){
-      ImGui::SliderFloat("initial_radius", &params.initial_radius, 0, 1000);
+      ImGui::SliderFloat("initial_radius", &params.initial_radius, 0, 1);
       ImGui::SliderScalar("denoise_preserve", ImGuiDataType_Double, &params.denoise_preserve, &zero, &pi);
       ImGui::SliderScalar("denoise_planar", ImGuiDataType_Double, &params.denoise_planar, &zero, &pi);
       ImGui::Checkbox("nan_for_initr", &params.nan_for_initr);
@@ -81,8 +81,8 @@ namespace geoflow::nodes::mat {
           add_input("ma_coords", typeid(PointCollection));
           add_input("ma_is_interior", typeid(vec1i));
           add_input("ma_radii", typeid(vec1f));
-          add_input("offset", typeid(float));
-          add_input("min_z", typeid(float));          
+          //add_input("offset", typeid(float));
+          //add_input("min_z", typeid(float));          
           
           add_output("exterior_mat", typeid(PointCollection));
           add_output("exterior_radii", typeid(vec1f));
@@ -379,9 +379,9 @@ namespace geoflow::nodes::mat {
           add_output("vector", typeid(Vector3D));
           add_output("point", typeid(PointCollection));
 
-          add_param("x_value", (float)-50.0);
-          add_param("y_value", (float)-50.0);
-          add_param("z_value", (float)50);
+          add_param("x_value", (float)5.0);
+          add_param("y_value", (float)0.0);
+          add_param("z_value", (float)5.0);
       }
 
       void gui() {
@@ -448,8 +448,8 @@ namespace geoflow::nodes::mat {
           //// [11][21]
           geoflow::Triangle t1,t2;
           geoflow::TriangleCollection tc;
-          int Density = 8;
-          std::array<float, 3> points[9][17];
+          int Density = 10;
+          std::array<float, 3> points[11][21];
           //std::cout << "start triangulation" << std::endl;
           //std::cout << "debug test" << std::endl;
           for (int t = 0; t <= Density; t++)
@@ -564,10 +564,44 @@ namespace geoflow::nodes::mat {
           add_input("radii", typeid(vec1f));
           add_input("indice", typeid(vec1i));
           add_input("Vector1", typeid(Vector3D));
+          add_input("interval", typeid(float));
 
           add_output("MAT_points", typeid(PointCollection));
           add_output("radii", typeid(vec1f));
           add_output("indice", typeid(vec1i));
+      }
+      static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius, float interval) {
+          std::vector<Vector3D> points;
+          Vector3D point;
+          int nLongitude = (int)interval;
+          int nLatitude = 2 * nLongitude;
+          int p, s, i, j;
+          float x, y, z, out;
+          int nPitch = nLongitude + 1;
+          float DEGS_TO_RAD = 3.14159f / 180.0f;
+
+          float pitchInc = (180. / (float)nPitch) * DEGS_TO_RAD;
+          float rotInc = (360. / (float)nLatitude) * DEGS_TO_RAD;
+          for (p = 1; p < nPitch; p++)     // Generate all "intermediate vertices":
+          {
+              out = radius * sin((float)p * pitchInc);
+              if (out < 0) out = -out;    // abs() command won't work with all compilers
+              y = radius * cos(p * pitchInc);
+              //printf("OUT = %g\n", out);    // bottom vertex
+              //printf("nPitch = %d\n", nPitch);    // bottom vertex
+              for (s = 0; s < nLatitude; s++)
+              {
+                  x = out * cos(s * rotInc);
+                  z = out * sin(s * rotInc);
+                  point.x = x + v1.x;
+                  point.y = y + v1.y;
+                  point.z = z + v1.z;
+                  //outfile << x + pt.x << "," << y + pt.y << "," << z + pt.z << std::endl;
+                  //numVertices++;
+                  points.push_back(point);
+              }
+          }
+          return points;
       }
       
       static float PointToPointDis(Vector3DNew p1, Vector3DNew p2) restrict(amp,cpu)
@@ -1098,7 +1132,7 @@ namespace geoflow::nodes::mat {
        static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
           std::vector<Vector3D> points;
           Vector3D point;
-          int nLongitude =500;
+          int nLongitude = 100;
           int nLatitude = 2 * nLongitude;
           int p, s, i, j;
           float x, y, z, out;

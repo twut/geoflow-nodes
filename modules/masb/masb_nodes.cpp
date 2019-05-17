@@ -16,12 +16,12 @@ namespace geoflow::nodes::mat {
         auto point_collection = input("points").get<PointCollection>();
         auto normals_vec3f = input("normals").get<vec3f>();
 
-        float min_z= point_collection[0][2];
+        /*float min_z= point_collection[0][2];
         for (int i = 0; i < point_collection.size(); i++) 
         {
             float temp = point_collection[i][2];
             if (temp < min_z) min_z = temp;
-        }
+        }*/
 
 
         masb::ma_data madata;
@@ -78,7 +78,7 @@ namespace geoflow::nodes::mat {
         output("ma_radii").set(ma_radii);
         output("ma_qidx").set(ma_qidx);
         output("ma_is_interior").set(ma_is_interior);
-        output("min_z").set(min_z);
+        //output("min_z").set(min_z);
     }
 
     void MATfilter::process() {
@@ -86,8 +86,8 @@ namespace geoflow::nodes::mat {
         auto matpoints = input("ma_coords").get<PointCollection>();
         auto interior_index = input("ma_is_interior").get<vec1i>();
         auto ma_radii = input("ma_radii").get<vec1f>();
-        float offset = input("offset").get<float>();
-        float min_z = input("min_z").get<float>();
+        //float offset = input("offset").get<float>();
+        //float min_z = input("min_z").get<float>();
 
         
         std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\ma_is_interior.txt";
@@ -113,8 +113,7 @@ namespace geoflow::nodes::mat {
 
         for (int i = 0; i < matpoints.size(); i++) 
         {
-            if (interior_index[i] == 1 )
-            //if (interior_index[i] == 1 && matpoints[i][2]>(min_z- offset))
+            if (interior_index[i] == 1 )            
             {
                 interior_mat.push_back(matpoints[i]);
                 interior_radii.push_back(ma_radii[i]);
@@ -325,6 +324,7 @@ namespace geoflow::nodes::mat {
         auto point_collection = input("MATpoints").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
         auto indice = input("indice").get<vec1i>();
+        auto interval = input("interval").get<float>();
 
         // -------------output----------------------//
         PointCollection visible_mat;
@@ -359,7 +359,7 @@ namespace geoflow::nodes::mat {
         Vector3D v1 = input("Vector1").get<Vector3D>();
         Vector3DNew v1_new(v1);
 
-        std::vector<Vector3D> v2_list = OneQuery::SpherePoints(v1, 500);
+        std::vector<Vector3D> v2_list = AMPGPUQueryTest::SpherePoints(v1, 500, interval);
         int linesize = v2_list.size();
 
         std::vector<Vector3DNew> v2_new;
