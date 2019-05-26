@@ -13,6 +13,7 @@ namespace geoflow::nodes::mat {
     R->register_node<NumberNode>("Number");
     R->register_node<ViewPoint>("ViewPoint");
     R->register_node<MATfilter>("MATfilter");
+    R->register_node<MATsimplification>("MATsimplification");
     R->register_node<OffsetNode>("Offset");
     R->register_node<VisibiltyQurey>("VisbiltyQurey");
     R->register_node<Triangulation>("Triangulation");    

@@ -109,6 +109,9 @@ namespace geoflow::nodes::mat {
 
         std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\ex_indices_out.txt";
         std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
+
+        std::string filepath1 = "c:\\users\\tengw\\documents\\git\\Results\\in_filtered_MAT.txt";
+        std::ofstream outfile1(filepath1, std::fstream::out | std::fstream::trunc);
         
 
         for (int i = 0; i < matpoints.size(); i++) 
@@ -118,6 +121,7 @@ namespace geoflow::nodes::mat {
                 interior_mat.push_back(matpoints[i]);
                 interior_radii.push_back(ma_radii[i]);
                 interior_idx.push_back(i);
+                outfile1 << matpoints[i][0] << "," << matpoints[i][1] << "," << matpoints[i][2] << "," << ma_radii[i] << "," << i << std::endl;
                 //outfile2 << ma_radii[i] << std::endl;
             }
             if(interior_index[i]==0)
@@ -129,7 +133,7 @@ namespace geoflow::nodes::mat {
             }
             
         }
-
+        outfile1.close();
         outfile2.close();
 
         std::cout << "Number of input points:" << matpoints.size() << std::endl;
@@ -142,6 +146,61 @@ namespace geoflow::nodes::mat {
         output("exterior_mat").set(exterior_mat);
         output("exterior_radii").set(exterior_radii);
         output("exterior_idx").set(exterior_idx);
+    }
+    void MATsimplification::process() {
+        std::cout << "simplification is running" << std::endl;
+        //-------------input----------------//
+        auto point_collection = input("interior_mat").get<PointCollection>();
+        auto radii = input("interior_radii").get<vec1f>();
+        auto indice = input("interior_idx").get<vec1i>();
+        float threshold = input("threshold").get<float>();
+        //---------output----------------//
+        PointCollection sim_mat;        
+        vec1f  sim_radii;
+        std::vector<std::vector<int>> sim_idx; 
+
+
+        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Sim_MAT_out.txt";
+        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+
+        
+
+        std::vector<KdTree::sphere> MAT_sph;
+        KdTree::sphere sp1;
+        Vector3D p1 = { point_collection[0][0],point_collection[0][1],point_collection[0][2] };
+        sp1.pos = p1;
+        sp1.radius = radii[0];
+        sp1.index.push_back(indice[0]);
+
+        MAT_sph.push_back(sp1);
+
+
+
+
+        for (int i = 0; i < point_collection.size(); i++) 
+        {
+            Vector3D v1 = { point_collection[i][0],point_collection[i][1],point_collection[i][2] };
+            bool ifsim = MATsimplification::ifSimplify(v1, radii[i], indice[i], threshold, MAT_sph);      
+        }
+
+        std::cout << "MAT_to_kd done" << std::endl;
+        std::cout << "Simplified MAT size:" << MAT_sph.size() << std::endl;
+        for (int i = 0; i < MAT_sph.size(); i++) 
+        {
+            arr3f point = {MAT_sph[i].pos.x,MAT_sph[i].pos.y,MAT_sph[i].pos.z };
+            sim_mat.push_back(point);
+            sim_radii.push_back(MAT_sph[i].radius);
+            sim_idx.push_back(MAT_sph[i].index);
+            outfile << MAT_sph[i].pos.x << "," << MAT_sph[i].pos.y << "," << MAT_sph[i].pos.z << "," << MAT_sph[i].radius << "," << MAT_sph[i].index.size() << std::endl;
+
+        }
+        outfile.close();
+        
+
+                                     
+        output("interior_mat").set(sim_mat);
+        output("interior_radii").set(sim_radii);
+        output("interior_idx").set(sim_idx);
     }
 
     void ComputeNormalsNode::process() {
@@ -215,7 +274,9 @@ namespace geoflow::nodes::mat {
     {
         auto point_collection = input("points").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
-        auto indice = input("indice").get<vec1i>();
+        //////////////////////////////
+        //auto indice = input("indice").get<vec1i>();
+        auto indice = input("indice").get<std::vector<vec1i>>();
 
         masb::ma_data madata;
         madata.m = point_collection.size();
@@ -252,6 +313,8 @@ namespace geoflow::nodes::mat {
             mp_Points[i].pos.z = points[i][2];
             mp_Points[i].radius = radii[i];
             mp_Points[i].index = indice[i];
+            //mp_Points[i].index.push_back(indice[i]);
+            
 
             Points[i].x = points[i][0];
             Points[i].y = points[i][1];
@@ -273,8 +336,8 @@ namespace geoflow::nodes::mat {
         std::cout<< "number of bounding box:" << (*kd).m_maxpoint.size() << std::endl;
         //std::cout << "Vector size of kdtreepoints:" << (*kd).m_boxKdTreePoint.size() << std::endl;
         std::cout << "size of level:" << (*kd).m_currentlevel.size() << std::endl;
-        std::cout << "KDTree output done"<<std::endl;
-       
+        
+        std::cout << "Level points are saving" << std::endl;
 
         
         int new_count = 0;
@@ -286,9 +349,11 @@ namespace geoflow::nodes::mat {
             //std::cout <<"Number of points in each level:"<< levelpoints.size() << std::endl;
             (*kd).m_levelpoints.push_back(levelpoints);
         }
+        std::cout << "KDTree output done" << std::endl;
+        
 
 
-        std::cout << "Total level points:" << new_count << std::endl;
+        /*std::cout << "Total level points:" << new_count << std::endl;
         std::cout << "At the end the size of allPointsVec are:" << allPointsVec.size() << std::endl;
         std::cout << "The size of m_levelpoints:" << (*kd).m_levelpoints.size() << std::endl;
         std::cout << "The size of boxs:" << (*kd).m_maxpoint.size() << std::endl;
@@ -307,7 +372,7 @@ namespace geoflow::nodes::mat {
             }
         }
         std::cout << "Correct points:" << flag<<std::endl;
-        std::cout << "Wrong points:" << new_count -flag << std::endl;
+        std::cout << "Wrong points:" << new_count -flag << std::endl;*/
         
  
         output("KDTree").set(kd);
@@ -323,7 +388,9 @@ namespace geoflow::nodes::mat {
         auto kd = input("KDTree").get<KdTree*>();
         auto point_collection = input("MATpoints").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
-        auto indice = input("indice").get<vec1i>();
+        //auto indice = input("indice").get<vec1i>();
+        //auto indice = input("indice").get<std::vector<vec1i>>();
+
         auto interval = input("interval").get<float>();
 
         // -------------output----------------------//
@@ -369,18 +436,36 @@ namespace geoflow::nodes::mat {
             v2_new.push_back(new_a);
         }
         std::vector<int> result;
-
-        
-        //run the query function here
+                
+        //run the query function here check if ray intersects with bounding boxes.
+        std::cout << "Ray-boxes check starts" << std::endl;
 
         AMPGPUQueryTest::GPUQuery(v2_new, v1_new, linesize, kd, result);
-
         
-        //std::cout << "GPU query starts" << std::endl;
+        std::cout << "Ray-boxes check done" << std::endl;
 
         int GPU_box_check_count = 0;
 
         std::vector<Vector3D> v2_intersected;
+        // processing bar                      //
+
+        //float progress = 0.0;
+        //while (progress < 1.0) {
+        //    int barWidth = 70;
+
+        //    std::cout << "[";
+        //    int pos = barWidth * progress;
+        //    for (int i = 0; i < barWidth; ++i) {
+        //        if (i < pos) std::cout << "=";
+        //        else if (i == pos) std::cout << ">";
+        //        else std::cout << " ";
+        //    }
+        //    std::cout << "] " << int(progress * 100.0) << " %\r";
+        //    std::cout.flush();
+
+        //    progress += 0.16; // for demonstration only
+        //}
+        //std::cout << std::endl;
 
         for (int i = 0; i < result.size();i++) {
             if (result[i] == 1) 
@@ -417,11 +502,20 @@ namespace geoflow::nodes::mat {
 
         
 
-        for (auto item : visble_sph) {
+        /*for (auto item : visble_sph) {
             visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
             visible_radii.push_back(item.radius);
             visible_indice.push_back(item.index);
+        }*/
+        ////////////////////
+        for (auto item : visble_sph) {
+            visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
+            visible_radii.push_back(item.radius);
+            for(auto idx: item.index)
+                visible_indice.push_back(idx);
         }
+
+
         endtime = clock();
 
         output("MAT_points").set(visible_mat);

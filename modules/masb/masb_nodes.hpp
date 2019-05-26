@@ -64,7 +64,7 @@ namespace geoflow::nodes::mat {
       add_output("ma_radii", typeid(vec1f));
       add_output("ma_qidx", typeid(vec1i));
       add_output("ma_is_interior", typeid(vec1i));
-      //add_output("min_z", typeid(float));      
+           
     }
     void gui(){
       ImGui::SliderFloat("initial_radius", &params.initial_radius, 0, 1);
@@ -94,6 +94,47 @@ namespace geoflow::nodes::mat {
       }
       void process();
 
+  };
+  class MATsimplification :public Node {
+  public:
+      using Node::Node;
+      void init() {
+          add_input("interior_mat", typeid(PointCollection));
+          add_input("interior_radii", typeid(vec1f));
+          add_input("interior_idx", typeid(vec1i));
+          add_input("threshold", typeid(float));
+
+          add_output("interior_mat", typeid(PointCollection));
+          add_output("interior_radii", typeid(vec1f));
+          add_output("interior_idx", typeid(std::vector<vec1i>));
+      }
+      void process();
+      static bool ifSimplify(Vector3D v1, float radius,int index, float threshold, std::vector<KdTree::sphere> &MAT_to_KD)
+      {
+          //std::cout << "Test " << std::endl;
+          KdTree::sphere tempSP;
+          
+          for (int i = 0; i < MAT_to_KD.size(); i++)
+          {
+              if (abs(MAT_to_KD[i].pos.x - v1.x) <= threshold && abs(MAT_to_KD[i].pos.y - v1.y) <= threshold && abs(MAT_to_KD[i].pos.z - v1.z) <= threshold && abs(MAT_to_KD[i].radius - radius) <= threshold)
+              {
+                  MAT_to_KD[i].index.push_back(index);
+                  //break;
+                  return 1;
+
+              }
+          }                                
+          tempSP.pos = v1;
+          tempSP.radius = radius;
+          tempSP.index.push_back(index);
+
+          MAT_to_KD.push_back(tempSP);
+          //break;
+          return 0;
+              
+          
+         
+      }
   };
 
   class ComputeNormalsNode:public Node {
@@ -266,7 +307,9 @@ namespace geoflow::nodes::mat {
       void init() {
           add_input("points", typeid(PointCollection));
           add_input("radii", typeid(vec1f));
-          add_input("indice", typeid(vec1i));
+          
+          //add_input("indice", typeid(vec1i));
+          add_input("indice", typeid(std::vector <vec1i>));
           add_output("KDTree", typeid(KdTree));
          
 
@@ -562,7 +605,8 @@ namespace geoflow::nodes::mat {
           add_input("KDTree", typeid(KdTree));
           add_input("MATpoints", typeid(PointCollection));
           add_input("radii", typeid(vec1f));
-          add_input("indice", typeid(vec1i));
+          //add_input("indice", typeid(vec1i));
+          //add_input("indice", typeid(std::vector<vec1i>));
           add_input("Vector1", typeid(Vector3D));
           add_input("interval", typeid(float));
 
@@ -570,6 +614,9 @@ namespace geoflow::nodes::mat {
           add_output("radii", typeid(vec1f));
           add_output("indice", typeid(vec1i));
       }
+
+      void process();
+
       static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius, float interval) {
           std::vector<Vector3D> points;
           Vector3D point;
@@ -740,44 +787,22 @@ namespace geoflow::nodes::mat {
               [v1_av, v2_av, kd_maxpoint, kd_minpoint,levelsize, hit_av, result_av](concurrency::index<1> idx) restrict(amp)
           {    
               int flag = 0;          
-              for (int i = 0; i < levelsize; i++) 
+              /*for (int i = 0; i < levelsize; i++) 
               {
                   
                   flag = AMPGPUQueryTest::CheckLineBox(kd_minpoint[i],kd_maxpoint[i],v1_av[idx],v2_av[idx],hit_av[idx]);
                   if (flag == 1) 
                   {   
                       result_av[idx] = 1;     
-                      /*int index_mark = 0;  
-                      for (int j = 0; j < 50; j++) {
-                          if (kd_levelpoints[i * 50 + j].radius != NULL) 
-                          {
-                              
-                              float minDis = AMPGPUQueryTest::PointToPointDis(v1_av[idx],kd_levelpoints[0].pos) - kd_levelpoints[0].radius;
-                              
-
-                              float dis = AMPGPUQueryTest::DistanceOfPointToLine(v1_av[idx], v2_av[idx], kd_levelpoints[i * 50 + j].pos);
-
-                              float temp_dis = AMPGPUQueryTest::PointToPointDis(v1_av[idx], kd_levelpoints[i * 50 + j].pos) - kd_levelpoints[i * 50 + j].radius;
-                              if (dis < kd_levelpoints[i * 50 + j].radius)
-                                  if (temp_dis < minDis)
-                                  {
-                                      minDis = temp_dis;
-                                      index_mark = i * 50 + j;
-
-                                  }
-                          };
-
-                      }
-                      pointlist[i].x = kd_levelpoints[index_mark].pos.x;
-                      pointlist[i].y = kd_levelpoints[index_mark].pos.y;
-                      pointlist[i].z = kd_levelpoints[index_mark].pos.z;
-                      radiilist[i] = kd_levelpoints[index_mark].radius;*/
-             
-                  }
-                  
-                  break;
-                  
+                      break;
+                  }     
+              }*/
+              flag = AMPGPUQueryTest::CheckLineBox(kd_minpoint[0], kd_maxpoint[0], v1_av[idx], v2_av[idx], hit_av[idx]);
+              if (flag == 1)
+              {
+                  result_av[idx] = 1;
               }
+
           });
           result_av.synchronize();
           
@@ -842,7 +867,8 @@ namespace geoflow::nodes::mat {
           KdTree::sphere result;
           std::vector<Vector3D> pointlist;
           std::vector<float> radiilist;
-          std::vector<int> indice;
+          //std::vector<int> indice;
+          std::vector<std::vector<int>> indice;
           Vector3DNew hit;
           int count = 0;
           for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
@@ -883,7 +909,7 @@ namespace geoflow::nodes::mat {
           return result;
 
       };
-      void process();
+      
       //--------------------   overload -----------------------//
       static float PointToPointDis(Vector3D p1, Vector3D p2) {
           float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
