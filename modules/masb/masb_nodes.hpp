@@ -320,6 +320,104 @@ namespace geoflow::nodes::mat {
 
       void process();
   };
+  class VisiblePC :public Node 
+  {
+  public:
+      using Node::Node;
+      void init()
+      {
+          add_input("KDTree", typeid(KdTree));
+          //add_input("interior_MAT", typeid(PointCollection));
+          add_input("original_pc", typeid(PointCollection));
+          add_input("viewPoint", typeid(Vector3D));
+          //add_input("interior_radii", typeid(vec1f));
+          add_output("visible_pc", typeid(PointCollection));
+      }
+      void process();      
+
+
+      //v1 viewpoint v2 target point//
+      static bool GetOneLineResult(Vector3D v1, Vector3D v2, KdTree *kd)
+      {         
+          bool visflag = true;
+          Vector3D hit;
+          int count = 0;
+          for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+              bool a = CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
+              if (a == 1) 
+              {
+                  for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+                      count++;
+                      float dis = DistanceOfPointToLine(v1, v2, pt.pos);
+                      if (dis <= pt.radius) 
+                      {
+                          visflag = false;
+                          break;
+                      }
+                  }
+                  if (visflag == false) 
+                  {
+                      break;
+                  }
+              }              
+          }
+          return visflag;                         
+
+      };
+      // overload //
+      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
+      {
+          float ab = sqrt(pow((a.x - b.x), 2.0f) + pow((a.y - b.y), 2.0f) + pow((a.z - b.z), 2.0f));
+          float as = sqrt(pow((a.x - s.x), 2.0f) + pow((a.y - s.y), 2.0f) + pow((a.z - s.z), 2.0f));
+          float bs = sqrt(pow((s.x - b.x), 2.0f) + pow((s.y - b.y), 2.0f) + pow((s.z - b.z), 2.0f));
+          float cos_A = (pow(as, 2.0f) + pow(ab, 2.0f) - pow(bs, 2.0f)) / (2.0f * ab*as);
+          float sin_A = sqrt(1.0f - pow(cos_A, 2.0f));
+          return as * sin_A;
+      }
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit)
+      {
+          if ((fDst1 * fDst2) >= 0.0f) return 0;
+          if (fDst1 == fDst2) return 0;
+          Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
+          return 1;
+      }
+
+      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis)
+      {
+          if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
+          if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          return 0;
+      }
+      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      {
+          if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
+          if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
+          if (L2[1] < B1[1] && L1[1] < B1[1]) return false;
+          if (L2[1] > B2[1] && L1[1] > B2[1]) return false;
+          if (L2[2] < B1[2] && L1[2] < B1[2]) return false;
+          if (L2[2] > B2[2] && L1[2] > B2[2]) return false;
+          if (L1[0] > B1[0] && L1[0] < B2[0] &&
+              L1[1] > B1[1] && L1[1] < B2[1] &&
+              L1[2] > B1[2] && L1[2] < B2[2])
+          {
+              Hit = L1;
+              return true;
+          }
+          if ((GetIntersection(L1[0] - B1[0], L2[0] - B1[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B1[1], L2[1] - B1[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B1[2], L2[2] - B1[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3))
+              || (GetIntersection(L1[0] - B2[0], L2[0] - B2[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B2[1], L2[1] - B2[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B2[2], L2[2] - B2[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3)))
+              return true;
+
+          return false;
+      }
+      
+      
+
+  };
   class VisibiltyQurey :public Node 
   {
   public: 
@@ -331,6 +429,7 @@ namespace geoflow::nodes::mat {
           add_input("interior_radii", typeid(vec1f));
           add_output("Visible_MAT", typeid(PointCollection));
           add_output("Radii_of_MAT", typeid(vec1f));
+          //add_output("indices", typeid(vec1i));
       }
       void process();
       static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
@@ -675,6 +774,7 @@ namespace geoflow::nodes::mat {
           if (Axis == 3 && Hit.x > B1.x && Hit.x < B2.x && Hit.y > B1.y && Hit.y < B2.y) return 1;
           return 0;
       }
+      //minbounding maxbounding viewpoint target point hit
       static int CheckLineBox(Vector3DNew B1, Vector3DNew B2, Vector3DNew L1, Vector3DNew L2, Vector3DNew &Hit)  restrict(cpu, amp)
       {
           if (L2.x < B1.x && L1.x < B1.x) return false;

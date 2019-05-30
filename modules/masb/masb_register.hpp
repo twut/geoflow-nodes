@@ -22,6 +22,8 @@ namespace geoflow::nodes::mat {
     R->register_node<MutiThreadsOneQuery>("MultiThreadsQuery");
     R->register_node<AMPGPUQueryTest>("GPUQuery");
     R->register_node<FromMATtoPointCloud>("FromMATtoPoints");
+    R->register_node<VisiblePC>("GetVisiblePC");
+
     return R;
   }
 

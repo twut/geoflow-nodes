@@ -821,9 +821,35 @@ namespace geoflow::nodes::mat {
         output("Points").set(resultPoints);
         outfile.close();
     }
+    void VisiblePC::process() 
+    {
+        std::cout << "Visible PC query starts" << std::endl;
+        //-------------input---------------//
+        Vector3D viewpoint = input("viewPoint").get<Vector3D>();
+        auto kdtree = input("KDTree").get<KdTree*>();
+        auto pc = input("original_pc").get<PointCollection>();
+        //------------output----------------//
+        PointCollection visible_pc;
+        // ---------process ------------------//
+        for (auto point : pc) 
+        {
+            Vector3D v2(point[0], point[1], point[2]);
+            bool ifvisible = GetOneLineResult(viewpoint, v2, kdtree);
+            if (ifvisible == true) 
+            {
+                visible_pc.push_back(point);
+            }
+        }       
+
+
+        //----------------set result ----------------//
+        std::cout << "visible pc done" << std::endl;
+        output("visible_pc").set(visible_pc);
+
+    }
 
     void VisibiltyQurey::process() {
-        std::cout << "Visibility Qurey start" << std::endl;
+        std::cout << "Visibility Qurey starts" << std::endl;
         //----------------input----------------//
         Vector3D viewpoint = input("ViewPoint").get<Vector3D>();
         auto kdtree = input("KDTree").get<KdTree*>();
@@ -833,6 +859,7 @@ namespace geoflow::nodes::mat {
         PointCollection visible_mat;
 
         vec1f visible_radii;
+        vec1i visible_index;
 
         std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Visible_MAT_out.txt";
         std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
@@ -862,11 +889,13 @@ namespace geoflow::nodes::mat {
 
             visible_mat.push_back({ interior_mat[i][0], interior_mat[i][1],interior_mat[i][2] });
             visible_radii.push_back(interior_radii[i]);
+            //for(auto index :)
             outfile << interior_mat[i][0] << "," << interior_mat[i][1] << "," << interior_mat[i][2] << "," << interior_radii[i] << std::endl;
         }
         outfile.close();
         output("Visible_MAT").set(visible_mat);
         output("Radii_of_MAT").set(visible_radii);
+        //output("indices").set(visible_index);
         std::cout << "Visiblity Qurey Done" << std::endl;
     }
  
