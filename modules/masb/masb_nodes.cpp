@@ -160,41 +160,55 @@ namespace geoflow::nodes::mat {
         std::vector<std::vector<int>> sim_idx; 
 
 
-        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Sim_MAT_out.txt";
-        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
-
         
 
-        std::vector<KdTree::sphere> MAT_sph;
-        KdTree::sphere sp1;
-        Vector3D p1 = { point_collection[0][0],point_collection[0][1],point_collection[0][2] };
-        sp1.pos = p1;
-        sp1.radius = radii[0];
-        sp1.index.push_back(indice[0]);
 
-        MAT_sph.push_back(sp1);
-
-
-
-
-        for (int i = 0; i < point_collection.size(); i++) 
+        if (threshold == 0) 
         {
-            Vector3D v1 = { point_collection[i][0],point_collection[i][1],point_collection[i][2] };
-            bool ifsim = MATsimplification::ifSimplify(v1, radii[i], indice[i], threshold, MAT_sph);      
+            sim_mat = point_collection;
+            sim_radii = radii;
+            for (auto idx : indice) 
+            {
+                std::vector<int> idx_vec;
+                idx_vec.push_back(idx);
+                sim_idx.push_back(idx_vec);
+            }
         }
-
-        std::cout << "MAT_to_kd done" << std::endl;
-        std::cout << "Simplified MAT size:" << MAT_sph.size() << std::endl;
-        for (int i = 0; i < MAT_sph.size(); i++) 
+        else 
         {
-            arr3f point = {MAT_sph[i].pos.x,MAT_sph[i].pos.y,MAT_sph[i].pos.z };
-            sim_mat.push_back(point);
-            sim_radii.push_back(MAT_sph[i].radius);
-            sim_idx.push_back(MAT_sph[i].index);
-            outfile << MAT_sph[i].pos.x << "," << MAT_sph[i].pos.y << "," << MAT_sph[i].pos.z << "," << MAT_sph[i].radius << "," << MAT_sph[i].index.size() << std::endl;
 
+            std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Sim_MAT_out.txt";
+            std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+
+            std::vector<KdTree::sphere> MAT_sph;
+            KdTree::sphere sp1;
+            Vector3D p1 = { point_collection[0][0],point_collection[0][1],point_collection[0][2] };
+            sp1.pos = p1;
+            sp1.radius = radii[0];
+            sp1.index.push_back(indice[0]);
+
+            MAT_sph.push_back(sp1);
+
+
+            for (int i = 0; i < point_collection.size(); i++)
+            {
+                Vector3D v1 = { point_collection[i][0],point_collection[i][1],point_collection[i][2] };
+                bool ifsim = MATsimplification::ifSimplify(v1, radii[i], indice[i], threshold, MAT_sph);
+            }
+
+            std::cout << "MAT_to_kd done" << std::endl;
+            std::cout << "Simplified MAT size:" << MAT_sph.size() << std::endl;
+            for (int i = 0; i < MAT_sph.size(); i++)
+            {
+                arr3f point = { MAT_sph[i].pos.x,MAT_sph[i].pos.y,MAT_sph[i].pos.z };
+                sim_mat.push_back(point);
+                sim_radii.push_back(MAT_sph[i].radius);
+                sim_idx.push_back(MAT_sph[i].index);
+                outfile << MAT_sph[i].pos.x << "," << MAT_sph[i].pos.y << "," << MAT_sph[i].pos.z << "," << MAT_sph[i].radius << "," << MAT_sph[i].index.size() << std::endl;
+
+            }
+            outfile.close();
         }
-        outfile.close();
         
 
                                      
@@ -826,24 +840,59 @@ namespace geoflow::nodes::mat {
         std::cout << "Visible PC query starts" << std::endl;
         //-------------input---------------//
         Vector3D viewpoint = input("viewPoint").get<Vector3D>();
-        auto kdtree = input("KDTree").get<KdTree*>();
+        //auto kdtree = input("KDTree").get<KdTree*>();
+        auto interior_MAT = input("interior_MAT").get<PointCollection>();
+        auto radii = input("interior_radii").get<vec1f>();
+
+
         auto pc = input("original_pc").get<PointCollection>();
         //------------output----------------//
         PointCollection visible_pc;
         // ---------process ------------------//
-        for (auto point : pc) 
+        /*for (auto point : pc)
         {
             Vector3D v2(point[0], point[1], point[2]);
             bool ifvisible = GetOneLineResult(viewpoint, v2, kdtree);
-            if (ifvisible == true) 
+            if (ifvisible == true)
             {
                 visible_pc.push_back(point);
             }
-        }       
+        }       */
 
+        //std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\dis_rad_MAT_out.txt";
+        //std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
 
+        for (int j=0;j<pc.size();j++)
+        {
+            bool visflag = true;
+            Vector3D v2(pc[j][0], pc[j][1], pc[j][2]);
+            for (int i = 0; i < interior_MAT.size(); i++)
+            {
+                Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
+                
+                float dis = DistancePointToSegment(viewpoint, v2, centre);
+                                
+                if (dis < radii[i])
+                {
+                    visflag = false;
+                    break;
+                }
+                
+                
+            }
+            
+            if (visflag == false)continue;
+            
+            visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
+            
+            
+        }
+
+        //outfile.close();
         //----------------set result ----------------//
         std::cout << "visible pc done" << std::endl;
+        std::cout << "visible points size:" << visible_pc.size() << std::endl;
+        
         output("visible_pc").set(visible_pc);
 
     }
@@ -855,14 +904,16 @@ namespace geoflow::nodes::mat {
         auto kdtree = input("KDTree").get<KdTree*>();
         auto interior_mat = input("interior_MAT").get<PointCollection>();
         auto interior_radii = input("interior_radii").get<vec1f>();
+        auto original_pc = input("original_pc").get<PointCollection>();
         //-----------output-------------------//
         PointCollection visible_mat;
 
         vec1f visible_radii;
         vec1i visible_index;
+        // ------------process -------------//
 
-        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Visible_MAT_out.txt";
-        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+        //std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Visible_MAT_out.txt";
+        //std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
         
 
         for (int i = 0; i < interior_mat.size(); i++) {
@@ -889,10 +940,10 @@ namespace geoflow::nodes::mat {
 
             visible_mat.push_back({ interior_mat[i][0], interior_mat[i][1],interior_mat[i][2] });
             visible_radii.push_back(interior_radii[i]);
-            //for(auto index :)
-            outfile << interior_mat[i][0] << "," << interior_mat[i][1] << "," << interior_mat[i][2] << "," << interior_radii[i] << std::endl;
+           
+            //outfile << interior_mat[i][0] << "," << interior_mat[i][1] << "," << interior_mat[i][2] << "," << interior_radii[i] << std::endl;
         }
-        outfile.close();
+        //outfile.close();
         output("Visible_MAT").set(visible_mat);
         output("Radii_of_MAT").set(visible_radii);
         //output("indices").set(visible_index);

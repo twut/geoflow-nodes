@@ -326,15 +326,47 @@ namespace geoflow::nodes::mat {
       using Node::Node;
       void init()
       {
-          add_input("KDTree", typeid(KdTree));
-          //add_input("interior_MAT", typeid(PointCollection));
+          //add_input("KDTree", typeid(KdTree));
+          add_input("interior_MAT", typeid(PointCollection));
+          add_input("interior_radii", typeid(vec1f));
           add_input("original_pc", typeid(PointCollection));
           add_input("viewPoint", typeid(Vector3D));
-          //add_input("interior_radii", typeid(vec1f));
+          
           add_output("visible_pc", typeid(PointCollection));
       }
       void process();      
 
+      static float PointToPointDis(Vector3D p1, Vector3D p2) 
+      {
+          float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
+          return dis;
+      }
+
+      static inline float dotProduct(const Vector3D &a, const Vector3D &b)
+      {
+          return(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+      }
+
+      static float DistancePointToSegment(Vector3D v1, Vector3D v2, Vector3D centre )
+      {
+          //v1 viewpoint v2 pt in pc;
+     
+
+          Vector3D v_12 = v2 - v1;
+          Vector3D v_1c = centre - v1;
+          float f = dotProduct(v_12 ,v_1c);
+          if (f < 0)
+              return PointToPointDis(v1, centre);
+
+          float d = dotProduct(v_12, v_12);
+          if( f>=d)
+              return PointToPointDis(v2, centre);
+
+          f = f / d;
+          Vector3D D = v1 + f * v_12;
+          return PointToPointDis(centre, D);
+
+      }
 
       //v1 viewpoint v2 target point//
       static bool GetOneLineResult(Vector3D v1, Vector3D v2, KdTree *kd)
@@ -349,7 +381,7 @@ namespace geoflow::nodes::mat {
                   for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
                       count++;
                       float dis = DistanceOfPointToLine(v1, v2, pt.pos);
-                      if (dis <= pt.radius) 
+                      if (dis < pt.radius) 
                       {
                           visflag = false;
                           break;
@@ -389,6 +421,7 @@ namespace geoflow::nodes::mat {
           if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
           return 0;
       }
+      //minbounding maxbounding viewpoint target point hit
       static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
       {
           if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
@@ -427,6 +460,7 @@ namespace geoflow::nodes::mat {
           add_input("interior_MAT", typeid(PointCollection));
           add_input("ViewPoint", typeid(Vector3D));
           add_input("interior_radii", typeid(vec1f));
+          add_input("original_pc", typeid(PointCollection));
           add_output("Visible_MAT", typeid(PointCollection));
           add_output("Radii_of_MAT", typeid(vec1f));
           //add_output("indices", typeid(vec1i));
