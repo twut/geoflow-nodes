@@ -838,6 +838,9 @@ namespace geoflow::nodes::mat {
     void VisiblePC::process() 
     {
         std::cout << "Visible PC query starts" << std::endl;
+
+        clock_t starttime, endtime;
+        starttime = clock();
         //-------------input---------------//
         Vector3D viewpoint = input("viewPoint").get<Vector3D>();
         //auto kdtree = input("KDTree").get<KdTree*>();
@@ -849,18 +852,44 @@ namespace geoflow::nodes::mat {
         //------------output----------------//
         PointCollection visible_pc;
         // ---------process ------------------//
-        /*for (auto point : pc)
-        {
-            Vector3D v2(point[0], point[1], point[2]);
-            bool ifvisible = GetOneLineResult(viewpoint, v2, kdtree);
-            if (ifvisible == true)
-            {
-                visible_pc.push_back(point);
-            }
-        }       */
 
-        //std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\dis_rad_MAT_out.txt";
-        //std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+
+        /*int vetsize = pc.size();
+        std::vector<arr3f> threadvec1;
+        std::vector<arr3f> threadvec2;
+        std::vector<arr3f> threadvec3;
+        std::vector<arr3f> threadvec4;
+
+
+        std::for_each(begin(pc), begin(pc) + 0.25*vetsize, [&threadvec1](arr3f x) {
+            threadvec1.push_back(x);
+        });
+        std::for_each(begin(pc) + 0.25*vetsize, begin(pc) + 0.5*vetsize, [&threadvec2](arr3f y) {
+            threadvec2.push_back(y);
+        });
+        std::for_each(begin(pc) + 0.5*vetsize, begin(pc) + 0.75*vetsize, [&threadvec3](arr3f z) {
+            threadvec3.push_back(z);
+        });
+        std::for_each(begin(pc) + 0.75*vetsize, end(pc) , [&threadvec4](arr3f v) {
+            threadvec4.push_back(v);
+        });
+
+        std::thread th[4];
+        
+        th[0] = std::thread(VisiblePC::GetVisblePT, threadvec1, interior_MAT, radii, viewpoint, std::ref(visible_pc));
+        th[0].join();
+        th[1] = std::thread(VisiblePC::GetVisblePT, threadvec2, interior_MAT, radii, viewpoint, std::ref(visible_pc));
+        th[1].join();
+        th[2] = std::thread(VisiblePC::GetVisblePT, threadvec3, interior_MAT, radii, viewpoint, std::ref(visible_pc));
+        th[2].join();
+        th[3] = std::thread(VisiblePC::GetVisblePT, threadvec4, interior_MAT, radii, viewpoint, std::ref(visible_pc));
+        th[3].join();*/
+
+        
+
+        
+        
+
 
         for (int j=0;j<pc.size();j++)
         {
@@ -870,28 +899,27 @@ namespace geoflow::nodes::mat {
             {
                 Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
                 
-                float dis = DistancePointToSegment(viewpoint, v2, centre);
-                                
+                float dis = DistancePointToSegment(viewpoint, v2, centre);                                
                 if (dis < radii[i])
                 {
                     visflag = false;
                     break;
-                }
-                
-                
+                }                                
             }
             
             if (visflag == false)continue;
             
-            visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
-            
+            visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });            
             
         }
+
+        endtime = clock();
 
         //outfile.close();
         //----------------set result ----------------//
         std::cout << "visible pc done" << std::endl;
         std::cout << "visible points size:" << visible_pc.size() << std::endl;
+        std::cout << "running time:" << endtime - starttime << std::endl;
         
         output("visible_pc").set(visible_pc);
 

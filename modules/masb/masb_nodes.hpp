@@ -15,6 +15,7 @@ namespace geoflow::nodes::mat {
    
 
   static std::mutex mtx;
+  static std::mutex mtx2;
   class FromMATtoPointCloud :public Node {
   public:
       using Node::Node;
@@ -335,6 +336,32 @@ namespace geoflow::nodes::mat {
           add_output("visible_pc", typeid(PointCollection));
       }
       void process();      
+
+      static void GetVisblePT(std::vector<arr3f> pc, PointCollection interior_MAT,vec1f radii,Vector3D viewpoint,PointCollection &visible_pc)
+      {
+          for (int j = 0; j < pc.size(); j++)
+          {
+              bool visflag = true;
+              Vector3D v2(pc[j][0], pc[j][1], pc[j][2]);
+              for (int i = 0; i < interior_MAT.size(); i++)
+              {
+                  Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
+
+                  float dis = DistancePointToSegment(viewpoint, v2, centre);
+                  if (dis < radii[i])
+                  {
+                      visflag = false;
+                      break;
+                  }
+              }
+
+              if (visflag == false)continue;
+              mtx2.lock();
+              visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
+              mtx2.unlock();
+          }
+
+      }
 
       static float PointToPointDis(Vector3D p1, Vector3D p2) 
       {
