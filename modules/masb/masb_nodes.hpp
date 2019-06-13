@@ -275,16 +275,13 @@ namespace geoflow::nodes::mat {
       }
 
       std::vector<KdTree::sphere> GetLevelPoints(Vector3D max, Vector3D min, std::vector<KdTree::sphere> *points) {
-          std::vector<KdTree::sphere> LevelPoints;
-          
-          
+          std::vector<KdTree::sphere> LevelPoints;       
           std::vector<KdTree::sphere> diff;
           std::vector<KdTree::sphere>::iterator it;
           for (auto a:*points){
               if(a.pos.x<=max.x&&a.pos.x>=min.x)
                   if(a.pos.y<=max.y&&a.pos.y>=min.y)
                       if (a.pos.z <= max.z&&a.pos.z >= min.z) {
-
                           LevelPoints.push_back(a);
                           for (it = (*points).begin(); it != (*points).end();) {
                               if ((*it).pos == a.pos)
@@ -296,13 +293,43 @@ namespace geoflow::nodes::mat {
                           }
                       }
               
-          }
-          
+          }          
           /*it = std::set_difference((*points).begin(), (*points).end(), LevelPoints.begin(), LevelPoints.end(), diff.begin());
           diff.resize(it - diff.begin());
           *points = diff;*/
+          return LevelPoints;      
+      }
+      static bool BoxIntersectsSphere(Vector3D Bmin, Vector3D Bmax, Vector3D C, float r) {
+          float r2 = r * r;
+          float dmin = 0;
+          for (int i = 0; i < 3; i++) {
+              if (C[i] < Bmin[i]) dmin += ((C[i] - Bmin[i])*(C[i] - Bmin[i]));
+              else if (C[i] > Bmax[i]) dmin += ((C[i] - Bmax[i])*(C[i] - Bmax[i]));
+          }
+          return dmin <= r2;
+      }
+
+      std::vector<KdTree::sphere> NewGetLevelPoints(Vector3D max, Vector3D min, std::vector<KdTree::sphere> *points) {
+          std::vector<KdTree::sphere> LevelPoints;
+          std::vector<KdTree::sphere> diff;
+          std::vector<KdTree::sphere>::iterator it;
+          for (auto a : *points) {              
+              if (BoxIntersectsSphere(min,max,a.pos,a.radius))
+              {
+                  LevelPoints.push_back(a);
+                  for (it = (*points).begin(); it != (*points).end();) {
+                      if ((*it).pos == a.pos)
+                          it = (*points).erase(it);
+                      else
+                      {
+                          ++it;
+                      }
+                  }
+              }
+
+          }
+          
           return LevelPoints;
-      
       }
 
       void init() {

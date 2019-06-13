@@ -358,7 +358,7 @@ namespace geoflow::nodes::mat {
         for (int i = (*kd).m_maxpoint.size()-1 ; i >=0; i--)
         {
 
-            std::vector<KdTree::sphere> levelpoints = BuildKDtree::GetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], &allPointsVec);
+            std::vector<KdTree::sphere> levelpoints = BuildKDtree::NewGetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], &allPointsVec);
             new_count +=levelpoints.size() ;
             //std::cout <<"Number of points in each level:"<< levelpoints.size() << std::endl;
             (*kd).m_levelpoints.push_back(levelpoints);
