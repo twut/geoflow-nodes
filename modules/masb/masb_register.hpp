@@ -23,6 +23,9 @@ namespace geoflow::nodes::mat {
     R->register_node<AMPGPUQueryTest>("GPUQuery");
     R->register_node<FromMATtoPointCloud>("FromMATtoPoints");
     R->register_node<VisiblePC>("GetVisiblePC");
+    R->register_node<SightVector>("GetSightVectors");
+    R->register_node<GetRaysResult>("GetRaysResult");
+    
 
     return R;
   }

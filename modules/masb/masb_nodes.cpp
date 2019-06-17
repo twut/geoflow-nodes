@@ -343,7 +343,7 @@ namespace geoflow::nodes::mat {
         outfile.close();
         
         KdTree* kd = BuildKDtree::BuildKdTree(Points, m_nPoints,20);
-        //center = (*kd).centerofBoundingBox();
+        center = (*kd).centerofBoundingBox();
        
         //std::cout << "center point of bounding box:" << center.x << "," << center.y << "," << center.z << std::endl;
         std::cout << "Total number of points in kd-tree"<< allPointsVec.size() << std::endl;
@@ -392,6 +392,7 @@ namespace geoflow::nodes::mat {
         output("KDTree").set(kd);
         
     }
+    
     void AMPGPUQueryTest::process() {
 
         clock_t starttime, endtime;
@@ -652,7 +653,50 @@ namespace geoflow::nodes::mat {
         std::cout << "Multiple threads running time:" << endtime - starttime << std::endl;
 
     }
+    void GetRaysResult::process()
+    {
+        std::cout << "get rays result starts" << std::endl;
+        clock_t starttime, endtime;
+        starttime = clock();
+        // --------------input---------------------//
+        auto kd = input("KDTree").get<KdTree*>();
+        auto point_collection = input("MATpoints").get<PointCollection>();
+        auto radii = input("radii").get<vec1f>();
+        auto headvectors = input("Headvectors").get<std::vector<Vector3D>>();
+        auto endvectors = input("Endvectors").get<std::vector<Vector3D>>();
+        //-------output-------------------//
+        std::vector<KdTree::sphere> visble_sph;
 
+        PointCollection visible_mat;
+        vec1f visible_radii;
+        vec1i visible_indice;
+
+        //----------process------------//
+        // check ray intersect with box first here AMP query //
+        for (int j = 0; j < headvectors.size(); j++) 
+        {
+            auto sph1 = AMPGPUQueryTest::GetOneLineResult(headvectors[j],endvectors[j], kd);
+            visble_sph.push_back(sph1);
+        }
+
+
+        
+        for (auto item : visble_sph) {
+            visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
+            visible_radii.push_back(item.radius);
+            for (auto idx : item.index)
+                visible_indice.push_back(idx);
+        }
+
+
+
+        endtime = clock();
+
+        output("MAT_points").set(visible_mat);
+        output("radii").set(visible_radii);
+        output("indice").set(visible_indice);
+        std::cout << "Get rays result running time:" << endtime - starttime << std::endl;
+    }
 
     void OneQuery::process() {
         std::cout << "OneQuery start" << std::endl;
@@ -923,6 +967,60 @@ namespace geoflow::nodes::mat {
         
         output("visible_pc").set(visible_pc);
 
+    }
+    void SightVector::process() 
+    {
+        std::cout << "sight vectors starts" << std::endl;
+        //-----------input ---------------------//        
+        Vector3D v1 = input("vector1").get<Vector3D>();
+        Vector3D v2 = input("vector2").get<Vector3D>();
+
+        float density = param<float>("Density");
+        float radius = param<float>("Radius");
+
+        
+        //------------output-----------------//
+        std::vector<Vector3D> Headvectors;
+        std::vector<Vector3D> Endvectors;
+
+        //-------------process-----------------//
+        Vector3D normal = (v2 - v1);
+        Vector3D perpen_normal(0, normal[2], -normal[1]);
+        auto u = perpen_normal.normalize();
+        std::cout << "Normalization:" << perpen_normal[0] << "," << perpen_normal[1] << "," << perpen_normal[2] << std::endl;
+        Vector3D v = crossProduct(perpen_normal, normal);
+        auto length = v.normalize();
+        std::cout << "v:" << v[0] << "," << v[1] << "," << v[2] << std::endl;
+        // change radius and N to dynamic later
+        //float radius = 200;
+        //float density = 100;
+
+        float delta = radius / density;
+        float epsilon = delta * 0.5f;
+        std::cout << "Test" << std::endl;
+
+        for (float y = -radius; y < radius + epsilon; y += delta)
+        {
+            for (float x = -radius; x < radius + epsilon; x += delta)
+            {
+                Headvectors.push_back(v1 + x * perpen_normal + y * v); // v1 is the point on the plane
+                Endvectors.push_back(v2 + x * perpen_normal + y * v);
+            }
+        }
+        std::cout << "Test done" << std::endl;
+        
+        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Vectors_head_end.txt";
+        std::ofstream outfileVec(filepath, std::fstream::out | std::fstream::trunc);
+
+        for (int i = 0; i < Headvectors.size(); i++)
+        {
+            outfileVec << Headvectors[i][0] << "," << Headvectors[i][1] << "," << Headvectors[i][2] << ";" << Endvectors[i][0] << "," << Endvectors[i][1] << "," << Endvectors[i][2] << std::endl;
+        }
+        outfileVec.close();
+
+        output("Headvectors").set(Headvectors);
+        output("Endvectors").set(Endvectors);
+        std::cout << "sight vectors done" << std::endl;
     }
 
     void VisibiltyQurey::process() {

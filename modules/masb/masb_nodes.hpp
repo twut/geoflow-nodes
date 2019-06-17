@@ -601,6 +601,43 @@ namespace geoflow::nodes::mat {
       }
 
   };
+  class SightVector :public Node 
+  {
+  public:
+      using Node::Node;
+      void init(){
+          add_input("vector1", typeid(Vector3D));
+          add_input("vector2", typeid(Vector3D));
+          add_output("Headvectors", typeid(std::vector<Vector3D>));
+          add_output("Endvectors", typeid(std::vector<Vector3D>));
+
+          
+          add_param("Density", (float)500);
+          add_param("Radius", (float)500);
+      }
+      void gui(){
+          /*ImGui::InputFloat("x value", &param<float>("x_value"));
+          ImGui::InputFloat("y value", &param<float>("y_value"));
+          ImGui::InputFloat("z value", &param<float>("z_value"));*/
+          ImGui::InputFloat("Density", &param<float>("Density"));
+          ImGui::InputFloat("Radius", &param<float>("Radius"));
+          
+
+      }
+      void process();
+      static inline Vector3D crossProduct(const Vector3D &a, const Vector3D &b)
+      {
+          Vector3D result;
+
+          result[0] = a[1] * b[2] - a[2] * b[1];
+          result[1] = a[2] * b[0] - a[0] * b[2];
+          result[2] = a[0] * b[1] - a[1] * b[0];
+
+          return(result);
+      }
+      
+      
+  };
   class ViewPoint :public Node {
   public:
       using Node::Node;
@@ -777,6 +814,27 @@ namespace geoflow::nodes::mat {
           output("normals").set(normals);
       }
 
+  };
+  class GetRaysResult : public Node 
+  {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("Headvectors", typeid(std::vector<Vector3D>));
+          add_input("Endvectors", typeid(std::vector<Vector3D>));
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
+
+
+          add_output("MAT_points", typeid(PointCollection));
+          add_output("radii", typeid(vec1f));
+          add_output("indice", typeid(vec1i));
+          
+      }
+      void process();
+      
   };
  
   class AMPGPUQueryTest :public Node {
@@ -1304,20 +1362,20 @@ namespace geoflow::nodes::mat {
           return dis;
       }
 
-      int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) {
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit) {
           if ((fDst1 * fDst2) >= 0.0f) return 0;
           if (fDst1 == fDst2) return 0;
           Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
           return 1;
       }
 
-      int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis) {
+      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis) {
           if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2]&& Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
           if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
           if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
           return 0;
       }
-      int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
       {
           if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
           if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
