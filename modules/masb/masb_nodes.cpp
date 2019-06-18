@@ -673,10 +673,22 @@ namespace geoflow::nodes::mat {
 
         //----------process------------//
         // check ray intersect with box first here AMP query //
+        std::vector<bool> ifinter;
+
         for (int j = 0; j < headvectors.size(); j++) 
         {
-            auto sph1 = AMPGPUQueryTest::GetOneLineResult(headvectors[j],endvectors[j], kd);
-            visble_sph.push_back(sph1);
+            Vector3D hit;
+            bool inter = CheckLineBox((*kd).m_minpoint[0],(*kd).m_maxpoint[0],headvectors[j], endvectors[j],hit);
+            ifinter.push_back(inter);
+        }
+
+        for (int j = 0; j < headvectors.size(); j++) 
+        {
+            if (ifinter[j] == 1) 
+            {
+                auto sph1 = AMPGPUQueryTest::GetOneLineResult(headvectors[j], endvectors[j], kd);
+                visble_sph.push_back(sph1);
+            }
         }
 
 
@@ -990,14 +1002,14 @@ namespace geoflow::nodes::mat {
         std::cout << "Normalization:" << perpen_normal[0] << "," << perpen_normal[1] << "," << perpen_normal[2] << std::endl;
         Vector3D v = crossProduct(perpen_normal, normal);
         auto length = v.normalize();
-        std::cout << "v:" << v[0] << "," << v[1] << "," << v[2] << std::endl;
+        //std::cout << "v:" << v[0] << "," << v[1] << "," << v[2] << std::endl;
         // change radius and N to dynamic later
         //float radius = 200;
         //float density = 100;
 
         float delta = radius / density;
         float epsilon = delta * 0.5f;
-        std::cout << "Test" << std::endl;
+        //std::cout << "Test" << std::endl;
 
         for (float y = -radius; y < radius + epsilon; y += delta)
         {
@@ -1007,7 +1019,7 @@ namespace geoflow::nodes::mat {
                 Endvectors.push_back(v2 + x * perpen_normal + y * v);
             }
         }
-        std::cout << "Test done" << std::endl;
+        //std::cout << "Test done" << std::endl;
         
         std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\Vectors_head_end.txt";
         std::ofstream outfileVec(filepath, std::fstream::out | std::fstream::trunc);

@@ -834,6 +834,52 @@ namespace geoflow::nodes::mat {
           
       }
       void process();
+      //--------------overload-------------------//
+      static float PointToPointDis(Vector3D p1, Vector3D p2) {
+          float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
+          return dis;
+      }
+
+      static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit)
+      {
+          if ((fDst1 * fDst2) >= 0.0f) return 0;
+          if (fDst1 == fDst2) return 0;
+          Hit = P1 + (P2 - P1) * (-fDst1 / (fDst2 - fDst1));
+          return 1;
+      }
+
+      static int inline InBox(Vector3D Hit, Vector3D B1, Vector3D B2, const int Axis)
+      {
+          if (Axis == 1 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          if (Axis == 2 && Hit[2] > B1[2] && Hit[2] < B2[2] && Hit[0] > B1[0] && Hit[0] < B2[0]) return 1;
+          if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
+          return 0;
+      }
+      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      {
+          if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
+          if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
+          if (L2[1] < B1[1] && L1[1] < B1[1]) return false;
+          if (L2[1] > B2[1] && L1[1] > B2[1]) return false;
+          if (L2[2] < B1[2] && L1[2] < B1[2]) return false;
+          if (L2[2] > B2[2] && L1[2] > B2[2]) return false;
+          if (L1[0] > B1[0] && L1[0] < B2[0] &&
+              L1[1] > B1[1] && L1[1] < B2[1] &&
+              L1[2] > B1[2] && L1[2] < B2[2])
+          {
+              Hit = L1;
+              return true;
+          }
+          if ((GetIntersection(L1[0] - B1[0], L2[0] - B1[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B1[1], L2[1] - B1[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B1[2], L2[2] - B1[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3))
+              || (GetIntersection(L1[0] - B2[0], L2[0] - B2[0], L1, L2, Hit) && InBox(Hit, B1, B2, 1))
+              || (GetIntersection(L1[1] - B2[1], L2[1] - B2[1], L1, L2, Hit) && InBox(Hit, B1, B2, 2))
+              || (GetIntersection(L1[2] - B2[2], L2[2] - B2[2], L1, L2, Hit) && InBox(Hit, B1, B2, 3)))
+              return true;
+
+          return false;
+      }
       
   };
  
