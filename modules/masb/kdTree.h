@@ -268,6 +268,7 @@ public:
         }
     };
     std::vector<std::vector<sphere>> m_levelpoints ;
+    std::vector<sphere> m_allballs;
     
     //std::vector<std::vector<int>> m_levelPointsIndex;
 

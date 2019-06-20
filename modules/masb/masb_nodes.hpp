@@ -601,7 +601,7 @@ namespace geoflow::nodes::mat {
       }
 
   };
-  class SightVector :public Node 
+  class ParallelVector :public Node 
   {
   public:
       using Node::Node;
@@ -1163,10 +1163,29 @@ namespace geoflow::nodes::mat {
           std::vector<std::vector<int>> indice;
           Vector3DNew hit;
           int count = 0;
-          for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+          //--------------------------allpoints-----------------------//          
+          bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], v1, v2, hit);
+          if (a == 1) {
+
+              for (auto pt : (*kd).m_allballs)
+              {
+                  count++;
+                  float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
+                  if (dis <= pt.radius) {
+                      pointlist.push_back(pt.pos);
+                      radiilist.push_back(pt.radius);
+                      indice.push_back(pt.index);
+                  }
+              }
+          }          
+          //------------------------levelpoints--------------------------//
+          /*for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
               bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
               if (a == 1) {
-                  for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+
+                  
+                  for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1])                   
+                  {
                       count++;
                       float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
                       if (dis <= pt.radius) {
@@ -1176,7 +1195,8 @@ namespace geoflow::nodes::mat {
                       }
                   }
               }
-          }
+          }*/
+          //------------------------------------------------//
           if (pointlist.size() > 0) {
               //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;
               //float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
@@ -1194,8 +1214,7 @@ namespace geoflow::nodes::mat {
               }
               result.pos = { pointlist[flag].x,pointlist[flag].y,pointlist[flag].z };
               result.radius = radiilist[flag];
-              result.index = indice[flag];
-              
+              result.index = indice[flag];             
               
           }
           return result;
@@ -1385,7 +1404,22 @@ namespace geoflow::nodes::mat {
       };
       void process();
   };
+  class VisiblePart :public Node 
+  {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("viewpoint", typeid(Vector3D));
+          add_input("targetPC", typeid(PointCollection));
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
 
+          add_output("visible_parts", typeid(PointCollection));          
+      }
+      void process();
+  };
 
 
   class OneQuery:public Node  {

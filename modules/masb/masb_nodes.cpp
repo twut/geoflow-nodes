@@ -339,11 +339,12 @@ namespace geoflow::nodes::mat {
 
             outfile<< mp_Points[i].pos.x << "," << mp_Points[i].pos.y << "," << mp_Points[i].pos.z <<","<< mp_Points[i].radius << std::endl;
             allPointsVec.push_back(mp_Points[i]);
-        }
+        }        
         outfile.close();
         
         KdTree* kd = BuildKDtree::BuildKdTree(Points, m_nPoints,20);
         center = (*kd).centerofBoundingBox();
+        (*kd).m_allballs = allPointsVec;
        
         //std::cout << "center point of bounding box:" << center.x << "," << center.y << "," << center.z << std::endl;
         std::cout << "Total number of points in kd-tree"<< allPointsVec.size() << std::endl;
@@ -980,7 +981,7 @@ namespace geoflow::nodes::mat {
         output("visible_pc").set(visible_pc);
 
     }
-    void SightVector::process() 
+    void ParallelVector::process()
     {
         std::cout << "sight vectors starts" << std::endl;
         //-----------input ---------------------//        
@@ -1033,6 +1034,55 @@ namespace geoflow::nodes::mat {
         output("Headvectors").set(Headvectors);
         output("Endvectors").set(Endvectors);
         std::cout << "sight vectors done" << std::endl;
+    }
+    void VisiblePart::process()     
+    {
+        std::cout << "Trying to get the visible part" << std::endl;
+        //-------------input ---------------- //
+        Vector3D viewpoint = input("viewpoint").get<Vector3D>();
+        auto targetPC = input("targetPC").get<PointCollection>();
+        auto kd = input("KDTree").get<KdTree*>();
+        auto interior_mat = input("MATpoints").get<PointCollection>();
+        auto radii = input("radii").get<vec1f>();
+        // ------------ output ---------------//
+        PointCollection vis_PC;
+        // ------------process ---------------//
+        for (auto pc : targetPC) 
+        {
+            Vector3D v2(pc[0], pc[1], pc[2]);
+            Vector3D hit;
+
+            //------------Chech each point visibility ---------//
+            bool inter = GetRaysResult::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], viewpoint, v2, hit);
+            if (inter==0) 
+            {
+                vis_PC.push_back({v2[0],v2[1],v2[2]});
+                continue;
+            }
+            else 
+            {
+                bool ifblock = 0;
+                for (auto ball : (*kd).m_allballs)                {
+                    
+                    float dis = VisibiltyQurey::DistanceOfPointToLine(viewpoint, v2, ball.pos);
+                    if (dis <= ball.radius) {
+                        ifblock = 1;
+                        break;
+                    }                    
+                }
+                if (ifblock == 1) 
+                {
+                    continue;
+                }
+                vis_PC.push_back({ v2[0],v2[1],v2[2]});
+            }
+        }
+
+
+
+
+        output("visible_parts").set(vis_PC);
+        std::cout << "Visible part is done" << std::endl;
     }
 
     void VisibiltyQurey::process() {
