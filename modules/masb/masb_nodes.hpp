@@ -372,14 +372,18 @@ namespace geoflow::nodes::mat {
               Vector3D v2(pc[j][0], pc[j][1], pc[j][2]);
               for (int i = 0; i < interior_MAT.size(); i++)
               {
-                  Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
+                  if (i != j) {
+                      Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
 
-                  float dis = DistancePointToSegment(viewpoint, v2, centre);
-                  if (dis < radii[i])
-                  {
-                      visflag = false;
-                      break;
+                      float dis = DistancePointToSegment(viewpoint, v2, centre);
+                      if (dis < radii[i])
+                      {
+                          visflag = false;
+                          break;
+                      }
                   }
+                  else
+                      continue;
               }
 
               if (visflag == false)continue;
@@ -505,7 +509,7 @@ namespace geoflow::nodes::mat {
       
 
   };
-  class VisibiltyQurey :public Node 
+  class VisibiltyQurey :public Node //old version cylinder check
   {
   public: 
       using Node::Node;

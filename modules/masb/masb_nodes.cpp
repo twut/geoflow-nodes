@@ -46,21 +46,21 @@ namespace geoflow::nodes::mat {
         madata.ma_coords = &ma_coords_;
         madata.ma_qidx = ma_qidx_.data();
 
+        //std::cout << "test  bug" << std::endl;
         masb::compute_masb_points(params, madata);
-
+        //std::cout << "test  bug1" << std::endl;
         vec1i ma_qidx;
         ma_qidx.reserve(madata.m * 2);
         for (size_t i = 0; i < madata.m * 2; ++i) {
             ma_qidx.push_back(madata.ma_qidx[i]);
         }
-
+        
         PointCollection ma_coords;
         ma_coords.reserve(madata.m * 2);
         for (auto& c : *madata.ma_coords) {
             ma_coords.push_back({ c[0], c[1], c[2] });
         }
-
-
+        
 
         //----- radii -----------------//
         vec1f ma_radii;
@@ -941,34 +941,12 @@ namespace geoflow::nodes::mat {
         th[2].join();
         th[3] = std::thread(VisiblePC::GetVisblePT, threadvec4, interior_MAT, radii, viewpoint, std::ref(visible_pc));
         th[3].join();*/
-
-        
-
-        
-        
-
-
-        for (int j=0;j<pc.size();j++)
-        {
-            bool visflag = true;
-            Vector3D v2(pc[j][0], pc[j][1], pc[j][2]);
-            for (int i = 0; i < interior_MAT.size(); i++)
-            {
-                Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
-                
-                float dis = DistancePointToSegment(viewpoint, v2, centre);                                
-                if (dis < radii[i])
-                {
-                    visflag = false;
-                    break;
-                }                                
-            }
             
-            if (visflag == false)continue;
             
-            visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });            
-            
-        }
+               
+        GetVisblePT(pc, interior_MAT, radii, viewpoint, visible_pc);
+
+       
 
         endtime = clock();
 
