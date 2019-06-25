@@ -1168,7 +1168,7 @@ namespace geoflow::nodes::mat {
           Vector3DNew hit;
           int count = 0;
           //--------------------------allpoints-----------------------//          
-          bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], v1, v2, hit);
+          /*bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], v1, v2, hit);
           if (a == 1) {
 
               for (auto pt : (*kd).m_allballs)
@@ -1181,9 +1181,9 @@ namespace geoflow::nodes::mat {
                       indice.push_back(pt.index);
                   }
               }
-          }          
+          } */         
           //------------------------levelpoints--------------------------//
-          /*for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+          for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
               bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
               if (a == 1) {
 
@@ -1199,7 +1199,7 @@ namespace geoflow::nodes::mat {
                       }
                   }
               }
-          }*/
+          }
           //------------------------------------------------//
           if (pointlist.size() > 0) {
               //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;

@@ -195,9 +195,9 @@ namespace geoflow::nodes::mat {
                 Vector3D v1 = { point_collection[i][0],point_collection[i][1],point_collection[i][2] };
                 bool ifsim = MATsimplification::ifSimplify(v1, radii[i], indice[i], threshold, MAT_sph);
             }
-
+            
             std::cout << "MAT_to_kd done" << std::endl;
-            std::cout << "Simplified MAT size:" << MAT_sph.size() << std::endl;
+            
             for (int i = 0; i < MAT_sph.size(); i++)
             {
                 arr3f point = { MAT_sph[i].pos.x,MAT_sph[i].pos.y,MAT_sph[i].pos.z };
@@ -215,6 +215,8 @@ namespace geoflow::nodes::mat {
         output("interior_mat").set(sim_mat);
         output("interior_radii").set(sim_radii);
         output("interior_idx").set(sim_idx);
+        std::cout << "Simplified MAT size:" << sim_mat.size() << std::endl;
+        
     }
 
     void ComputeNormalsNode::process() {
@@ -906,6 +908,7 @@ namespace geoflow::nodes::mat {
 
 
         auto pc = input("original_pc").get<PointCollection>();
+        std::cout << "input pc size" << pc.size() << std::endl;
         //------------output----------------//
         PointCollection visible_pc;
         // ---------process ------------------//
