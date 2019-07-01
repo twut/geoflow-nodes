@@ -6,6 +6,8 @@
 #include <thread>
 #include <time.h>
 #include<amp.h>
+#include "region_grower.hpp"
+#include "region_grower_testers.hpp"
 
 
 
@@ -16,14 +18,13 @@ namespace geoflow::nodes::mat {
         auto point_collection = input("points").get<PointCollection>();
         auto normals_vec3f = input("normals").get<vec3f>();
 
-        /*float min_z= point_collection[0][2];
-        for (int i = 0; i < point_collection.size(); i++) 
-        {
-            float temp = point_collection[i][2];
-            if (temp < min_z) min_z = temp;
-        }*/
+        masb::ma_parameters params;
+        params.initial_radius = param<float>("initial_radius");
+        params.denoise_preserve = param<float>("denoise_preserve");
+        params.denoise_planar = param<float>("denoise_planar");
+        params.nan_for_initr = param<bool>("nan_for_initr");
 
-
+        // prepare data structures and transfer data
         masb::ma_data madata;
         madata.m = point_collection.size();
 
@@ -32,7 +33,6 @@ namespace geoflow::nodes::mat {
         for (auto& p : point_collection) {
             coords.push_back(masb::Point(p.data()));
         }
-        
         masb::VectorList normals;
         normals.reserve(madata.m);
         for (auto& n : normals_vec3f) {
@@ -46,46 +46,185 @@ namespace geoflow::nodes::mat {
         madata.ma_coords = &ma_coords_;
         madata.ma_qidx = ma_qidx_.data();
 
-        //std::cout << "test  bug" << std::endl;
+        // compute mat points
         masb::compute_masb_points(params, madata);
-        //std::cout << "test  bug1" << std::endl;
+
+        // retrieve mat points
         vec1i ma_qidx;
         ma_qidx.reserve(madata.m * 2);
         for (size_t i = 0; i < madata.m * 2; ++i) {
             ma_qidx.push_back(madata.ma_qidx[i]);
         }
-        
+
         PointCollection ma_coords;
         ma_coords.reserve(madata.m * 2);
-        for (auto& c : *madata.ma_coords) {
+        for (auto& c : ma_coords_) {
             ma_coords.push_back({ c[0], c[1], c[2] });
         }
-        
 
-        //----- radii -----------------//
-        vec1f ma_radii;
-        ma_radii.reserve(madata.m * 2);
+        // Compute medial geometry
+        vec1f ma_radii(madata.m * 2);
+        vec1f ma_sepangle(madata.m * 2);
+        vec3f ma_spoke_f1(madata.m * 2);
+        vec3f ma_spoke_f2(madata.m * 2);
+        vec3f ma_bisector(madata.m * 2);
+        vec3f ma_spokecross(madata.m * 2);
         for (size_t i = 0; i < madata.m * 2; ++i) {
-            double r = Vrui::Geometry::dist(coords[i%madata.m], ma_coords_[i]);            
-            ma_radii.push_back(r);
+            auto i_ = i % madata.m;
+            auto& c = ma_coords_[i];
+            // feature points
+            auto& f1 = coords[i_];
+            auto& f2 = coords[ma_qidx[i]];
+            // radius
+            ma_radii[i] = Vrui::Geometry::dist(f1, c);
+            // spoke vectors
+            auto s1 = f1 - c;
+            auto s2 = f2 - c;
+            ma_spoke_f1[i] = { s1[0], s1[1], s1[2] };
+            ma_spoke_f2[i] = { s2[0], s2[1], s2[2] };
+            // bisector
+            s1.normalize();
+            s2.normalize();
+            auto b = (s1 + s2).normalize();
+            ma_bisector[i] = { b[0], b[1], b[2] };
+            // separation angle
+            ma_sepangle[i] = std::acos(s1*s2);
+            // cross product of spoke vectors
+            auto scross = Vrui::Geometry::cross(s1, s2).normalize();
+            ma_spokecross[i] = { scross[0], scross[1], scross[2] };
         }
-
-
         vec1i ma_is_interior(madata.m * 2, 0);
         std::fill_n(ma_is_interior.begin(), madata.m, 1);
 
         output("ma_coords").set(ma_coords);
-        output("ma_radii").set(ma_radii);
         output("ma_qidx").set(ma_qidx);
+        output("ma_radii").set(ma_radii);
         output("ma_is_interior").set(ma_is_interior);
-        //output("min_z").set(min_z);
+        output("ma_sepangle").set(ma_sepangle);
+        output("ma_bisector").set(ma_bisector);
+        output("ma_spoke_f1").set(ma_spoke_f1);
+        output("ma_spoke_f2").set(ma_spoke_f2);
+        output("ma_spokecross").set(ma_spokecross);
+    }
+    //void ComputeMedialAxisNode::process() {
+    //    auto point_collection = input("points").get<PointCollection>();
+    //    auto normals_vec3f = input("normals").get<vec3f>();
+
+    //    /*float min_z= point_collection[0][2];
+    //    for (int i = 0; i < point_collection.size(); i++) 
+    //    {
+    //        float temp = point_collection[i][2];
+    //        if (temp < min_z) min_z = temp;
+    //    }*/
+    //    std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\point.txt";
+    //    std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+    //    for (auto pt : point_collection) 
+    //    {
+    //        outfile << pt[0] << "," << pt[1] << "," << pt[2] << std::endl;
+    //    }
+    //    outfile.close();
+
+    //    std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\normals.txt";
+    //    std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
+    //    for (auto normal : normals_vec3f) 
+    //    {
+    //        outfile2 << normal[0] << "," << normal[1] << "," << normal[2] << std::endl;
+    //    }
+    //    outfile2.close();
+
+
+    //    masb::ma_data madata;
+    //    madata.m = point_collection.size();
+
+    //    masb::PointList coords;
+    //    coords.reserve(madata.m);
+    //    for (auto& p : point_collection) {
+    //        coords.push_back(masb::Point(p.data()));
+    //    }
+    //    
+    //    masb::VectorList normals;
+    //    normals.reserve(madata.m);
+    //    for (auto& n : normals_vec3f) {
+    //        normals.push_back(masb::Vector(n.data()));
+    //    }
+    //    masb::PointList ma_coords_(madata.m * 2);
+    //    std::vector<int> ma_qidx_(madata.m * 2);
+
+    //    madata.coords = &coords;
+    //    madata.normals = &normals;
+    //    madata.ma_coords = &ma_coords_;
+    //    madata.ma_qidx = ma_qidx_.data();
+
+    //    std::cout << "test  bug" << std::endl;
+    //    masb::compute_masb_points(params, madata);
+    //    std::cout << "test  bug1" << std::endl;
+    //    vec1i ma_qidx;
+    //    ma_qidx.reserve(madata.m * 2);
+    //    for (size_t i = 0; i < madata.m * 2; ++i) {
+    //        ma_qidx.push_back(madata.ma_qidx[i]);
+    //    }
+    //    
+    //    PointCollection ma_coords;
+    //    ma_coords.reserve(madata.m * 2);
+    //    for (auto& c : *madata.ma_coords) {
+    //        ma_coords.push_back({ c[0], c[1], c[2] });
+    //    }
+    //    
+
+    //    ----- radii -----------------//
+    //    vec1f ma_radii;
+    //    ma_radii.reserve(madata.m * 2);
+    //    for (size_t i = 0; i < madata.m * 2; ++i) {
+    //        double r = Vrui::Geometry::dist(coords[i%madata.m], ma_coords_[i]);            
+    //        ma_radii.push_back(r);
+    //    }
+
+
+    //    vec1i ma_is_interior(madata.m * 2, 0);
+    //    std::fill_n(ma_is_interior.begin(), madata.m, 1);
+
+    //    output("ma_coords").set(ma_coords);
+    //    output("ma_radii").set(ma_radii);
+    //    output("ma_qidx").set(ma_qidx);
+    //    output("ma_is_interior").set(ma_is_interior);
+    //    output("min_z").set(min_z);
+    //}
+    void NegNormalDetector::process() 
+    {
+        //---------input -------------//
+        auto pc = input("originalPC").get<PointCollection>();
+        auto normals_vec3f = input("normals").get<vec3f>();
+        auto offset = input("offset").get<float>();
+
+        //---------output--------------//
+        PointCollection neg_pc;
+        vec3f normal_fixed;
+
+        // -----------process -------------//
+        for (int i = 0; i < normals_vec3f.size(); i++) 
+        {
+            if (normals_vec3f[i][2] < offset )
+            {
+                neg_pc.push_back({ pc[i][0],pc[i][1],pc[i][2] });
+                normal_fixed.push_back({ -normals_vec3f[i][0] ,-normals_vec3f[i][1] ,-normals_vec3f[i][2] });
+            }
+            else
+            {
+                normal_fixed.push_back({ normals_vec3f[i][0] ,normals_vec3f[i][1] ,normals_vec3f[i][2] });
+            }
+        }        
+        output("pc").set(neg_pc);
+        output("normals_fixed").set(normal_fixed);
     }
 
     void MATfilter::process() {
         std::cout << "Filter running" << std::endl;
+        auto pc = input("originalPC").get<PointCollection>();
         auto matpoints = input("ma_coords").get<PointCollection>();
         auto interior_index = input("ma_is_interior").get<vec1i>();
         auto ma_radii = input("ma_radii").get<vec1f>();
+        auto normals_vec3f = input("normals").get<vec3f>();
+
         //float offset = input("offset").get<float>();
         //float min_z = input("min_z").get<float>();
 
@@ -107,11 +246,13 @@ namespace geoflow::nodes::mat {
         vec1f  exterior_radii;
         vec1i exterior_idx;
 
-        std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\ex_indices_out.txt";
+        //----------process-----------//
+
+       /* std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\ex_indices_out.txt";
         std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
 
         std::string filepath1 = "c:\\users\\tengw\\documents\\git\\Results\\in_filtered_MAT.txt";
-        std::ofstream outfile1(filepath1, std::fstream::out | std::fstream::trunc);
+        std::ofstream outfile1(filepath1, std::fstream::out | std::fstream::trunc);*/
         
 
         for (int i = 0; i < matpoints.size(); i++) 
@@ -121,20 +262,68 @@ namespace geoflow::nodes::mat {
                 interior_mat.push_back(matpoints[i]);
                 interior_radii.push_back(ma_radii[i]);
                 interior_idx.push_back(i);
-                outfile1 << matpoints[i][0] << "," << matpoints[i][1] << "," << matpoints[i][2] << "," << ma_radii[i] << "," << i << std::endl;
-                //outfile2 << ma_radii[i] << std::endl;
+                //outfile1 << matpoints[i][0] << "," << matpoints[i][1] << "," << matpoints[i][2] << "," << ma_radii[i] << "," << i << std::endl;
+                
             }
-            if(interior_index[i]==0)
+            else
             {
                 exterior_mat.push_back(matpoints[i]);
                 exterior_radii.push_back(ma_radii[i]);
                 exterior_idx.push_back(i-0.5*matpoints.size());
-                outfile2 << i - 0.5*matpoints.size() << std::endl;
-            }
-            
+                //outfile2 << i - 0.5*matpoints.size() << std::endl;
+            }            
         }
-        outfile1.close();
-        outfile2.close();
+        
+        for (int i = 0; i < interior_mat.size(); i++) 
+        {
+            Vector3D in_pt(interior_mat[i][0], interior_mat[i][1], interior_mat[i][2]);
+            Vector3D pc_point(pc[i][0], pc[i][1], pc[i][2]);
+
+            // normal points upwards
+            /*float flag = if_interiorMAT(in_pt, pc_point);
+            
+            if (normals_vec3f[i][2] < 0)
+            {
+                if (flag < 0 || flag == 0) continue;
+                if (flag > 0)
+                {
+                    auto temp_mat = interior_mat[i];
+                    auto temp_radii = interior_radii[i];
+                    auto temp_index = interior_idx[i];
+
+                    interior_mat[i] = exterior_mat[i];
+                    interior_radii[i] = exterior_radii[i];
+                    interior_idx[i] = exterior_idx[i];
+
+                    exterior_mat[i] = temp_mat;
+                    exterior_radii[i] = temp_radii;
+                    exterior_idx[i] = temp_index;
+                }
+            }
+            if (normals_vec3f[i][2] > 0) 
+            {
+                if (flag > 0 || flag == 0) continue;
+                if(flag<0)
+                {
+                    auto temp_mat = interior_mat[i];
+                    auto temp_radii = interior_radii[i];
+                    auto temp_index = interior_idx[i];
+
+                    interior_mat[i] = exterior_mat[i];
+                    interior_radii[i] = exterior_radii[i];
+                    interior_idx[i] = exterior_idx[i];
+
+                    exterior_mat[i] = temp_mat;
+                    exterior_radii[i] = temp_radii;
+                    exterior_idx[i] = temp_index;
+                }
+
+            }*/
+
+        }
+
+        //outfile1.close();
+        //outfile2.close();
 
         std::cout << "Number of input points:" << matpoints.size() << std::endl;
         std::cout << "Number of interior MAT points :" << interior_mat.size() << std::endl;
@@ -146,6 +335,41 @@ namespace geoflow::nodes::mat {
         output("exterior_mat").set(exterior_mat);
         output("exterior_radii").set(exterior_radii);
         output("exterior_idx").set(exterior_idx);
+    }
+    void RegionGrowMedialAxisNode::process() 
+    {
+        auto ma_coords = input("ma_coords").get<PointCollection>();
+        auto ma_bisector = input("ma_bisector").get<vec3f>();
+        auto ma_sepangle = input("ma_sepangle").get<vec1f>();
+        auto ma_radii = input("ma_radii").get<vec1f>();
+
+        regiongrower::RegionGrower<MaData, Region> R;
+        R.min_segment_count = param<int>("min_count");
+
+        MaData D(ma_coords, ma_bisector, ma_sepangle, ma_radii, param<int>("k"));
+
+        switch (param<int>("method"))
+        {
+        case 0: {
+            AngleOfVectorsTester T_bisector_angle(param<float>("bisector_angle"));
+            R.grow_regions(D, T_bisector_angle); break;
+        } case 1: {
+            DiffOfAnglesTester T_separation_angle(param<float>("separation_angle"));
+            R.grow_regions(D, T_separation_angle); break;
+        } case 2: {
+            BallOverlapTester T_ball_overlap(param<float>("ball_overlap"));
+            R.grow_regions(D, T_ball_overlap); break;
+        } case 3: {
+            CountTester T_shape_count(param<int>("shape_count"));
+            R.grow_regions(D, T_shape_count); break;
+        } default: break;
+        };
+
+        vec1i segment_ids;
+        for (auto& region_id : R.region_ids) {
+            segment_ids.push_back(int(region_id));
+        }
+        output("segment_ids").set(segment_ids);
     }
     void MATsimplification::process() {
         std::cout << "simplification is running" << std::endl;

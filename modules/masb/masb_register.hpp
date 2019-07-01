@@ -26,6 +26,9 @@ namespace geoflow::nodes::mat {
     R->register_node<ParallelVector>("ParallelVector");    
     R->register_node<GetRaysResult>("GetRaysResult");
     R->register_node<VisiblePart>("GetVisiblePart");
+    R->register_node<NegNormalDetector>("NegNormalDetector");
+    R->register_node<RegionGrowMedialAxisNode>("RegionGrow");
+    
     
 
     return R;
