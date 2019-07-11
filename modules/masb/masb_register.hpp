@@ -28,6 +28,12 @@ namespace geoflow::nodes::mat {
     R->register_node<VisiblePart>("GetVisiblePart");
     R->register_node<NegNormalDetector>("NegNormalDetector");
     R->register_node<RegionGrowMedialAxisNode>("RegionGrow");
+    R->register_node<ShowClusterMAT>("ShowClusterMAT");
+    R->register_node<WritePC2File>("WritePC2File");
+    R->register_node<ReadNormal>("ReadNormal");
+    R->register_node<GetClusterSheets>("GetClusterSheets");
+    R->register_node<MATSeparation>("MATSeparation");
+    
     
     
 

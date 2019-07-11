@@ -106,89 +106,8 @@ namespace geoflow::nodes::mat {
         output("ma_spoke_f2").set(ma_spoke_f2);
         output("ma_spokecross").set(ma_spokecross);
     }
-    //void ComputeMedialAxisNode::process() {
-    //    auto point_collection = input("points").get<PointCollection>();
-    //    auto normals_vec3f = input("normals").get<vec3f>();
-
-    //    /*float min_z= point_collection[0][2];
-    //    for (int i = 0; i < point_collection.size(); i++) 
-    //    {
-    //        float temp = point_collection[i][2];
-    //        if (temp < min_z) min_z = temp;
-    //    }*/
-    //    std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\point.txt";
-    //    std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
-    //    for (auto pt : point_collection) 
-    //    {
-    //        outfile << pt[0] << "," << pt[1] << "," << pt[2] << std::endl;
-    //    }
-    //    outfile.close();
-
-    //    std::string filepath2 = "c:\\users\\tengw\\documents\\git\\Results\\normals.txt";
-    //    std::ofstream outfile2(filepath2, std::fstream::out | std::fstream::trunc);
-    //    for (auto normal : normals_vec3f) 
-    //    {
-    //        outfile2 << normal[0] << "," << normal[1] << "," << normal[2] << std::endl;
-    //    }
-    //    outfile2.close();
 
 
-    //    masb::ma_data madata;
-    //    madata.m = point_collection.size();
-
-    //    masb::PointList coords;
-    //    coords.reserve(madata.m);
-    //    for (auto& p : point_collection) {
-    //        coords.push_back(masb::Point(p.data()));
-    //    }
-    //    
-    //    masb::VectorList normals;
-    //    normals.reserve(madata.m);
-    //    for (auto& n : normals_vec3f) {
-    //        normals.push_back(masb::Vector(n.data()));
-    //    }
-    //    masb::PointList ma_coords_(madata.m * 2);
-    //    std::vector<int> ma_qidx_(madata.m * 2);
-
-    //    madata.coords = &coords;
-    //    madata.normals = &normals;
-    //    madata.ma_coords = &ma_coords_;
-    //    madata.ma_qidx = ma_qidx_.data();
-
-    //    std::cout << "test  bug" << std::endl;
-    //    masb::compute_masb_points(params, madata);
-    //    std::cout << "test  bug1" << std::endl;
-    //    vec1i ma_qidx;
-    //    ma_qidx.reserve(madata.m * 2);
-    //    for (size_t i = 0; i < madata.m * 2; ++i) {
-    //        ma_qidx.push_back(madata.ma_qidx[i]);
-    //    }
-    //    
-    //    PointCollection ma_coords;
-    //    ma_coords.reserve(madata.m * 2);
-    //    for (auto& c : *madata.ma_coords) {
-    //        ma_coords.push_back({ c[0], c[1], c[2] });
-    //    }
-    //    
-
-    //    ----- radii -----------------//
-    //    vec1f ma_radii;
-    //    ma_radii.reserve(madata.m * 2);
-    //    for (size_t i = 0; i < madata.m * 2; ++i) {
-    //        double r = Vrui::Geometry::dist(coords[i%madata.m], ma_coords_[i]);            
-    //        ma_radii.push_back(r);
-    //    }
-
-
-    //    vec1i ma_is_interior(madata.m * 2, 0);
-    //    std::fill_n(ma_is_interior.begin(), madata.m, 1);
-
-    //    output("ma_coords").set(ma_coords);
-    //    output("ma_radii").set(ma_radii);
-    //    output("ma_qidx").set(ma_qidx);
-    //    output("ma_is_interior").set(ma_is_interior);
-    //    output("min_z").set(min_z);
-    //}
     void NegNormalDetector::process() 
     {
         //---------input -------------//
@@ -216,14 +135,15 @@ namespace geoflow::nodes::mat {
         output("pc").set(neg_pc);
         output("normals_fixed").set(normal_fixed);
     }
+    
 
     void MATfilter::process() {
         std::cout << "Filter running" << std::endl;
-        auto pc = input("originalPC").get<PointCollection>();
+        //auto pc = input("originalPC").get<PointCollection>();
         auto matpoints = input("ma_coords").get<PointCollection>();
         auto interior_index = input("ma_is_interior").get<vec1i>();
         auto ma_radii = input("ma_radii").get<vec1f>();
-        auto normals_vec3f = input("normals").get<vec3f>();
+        //auto normals_vec3f = input("normals").get<vec3f>();
 
         //float offset = input("offset").get<float>();
         //float min_z = input("min_z").get<float>();
@@ -276,8 +196,8 @@ namespace geoflow::nodes::mat {
         
         for (int i = 0; i < interior_mat.size(); i++) 
         {
-            Vector3D in_pt(interior_mat[i][0], interior_mat[i][1], interior_mat[i][2]);
-            Vector3D pc_point(pc[i][0], pc[i][1], pc[i][2]);
+            //Vector3D in_pt(interior_mat[i][0], interior_mat[i][1], interior_mat[i][2]);
+            //Vector3D pc_point(pc[i][0], pc[i][1], pc[i][2]);
 
             // normal points upwards
             /*float flag = if_interiorMAT(in_pt, pc_point);
@@ -365,12 +285,167 @@ namespace geoflow::nodes::mat {
         } default: break;
         };
 
+        std::string filepath = "c:\\users\\tengw\\documents\\git\\Results\\segment_id.txt";
+        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+
         vec1i segment_ids;
         for (auto& region_id : R.region_ids) {
             segment_ids.push_back(int(region_id));
         }
+
+        std::set<int> id_values;
+        for (int i = 0; i < ma_coords.size(); i++) 
+        {
+            id_values.insert(segment_ids[i]);
+            outfile << ma_coords[i][0] << "," << ma_coords[i][1] << "," << ma_coords[i][2] << "," << segment_ids[i] << std::endl;
+        }
+        outfile.close();
         output("segment_ids").set(segment_ids);
+        std::cout << "total classes:" << id_values.size() << std::endl;
+        for (set<int>::iterator it = id_values.begin(); it != id_values.end(); it++)
+        {
+            std::cout << *it << " occurs " << std::endl;
+        }
     }
+
+    void ShowClusterMAT::process()
+    {
+        //----------input-----------------//
+        int classifiaction = param<int>("classification");
+        auto segment_ids = input("segment_ids").get<vec1i>();
+        auto MAT_points = input("ma_coords").get<PointCollection>();
+        // ------------output------------//
+        PointCollection selected_mat;
+        // ----------process -----------//
+        std::set<int> s;
+        for (int i = 0; i < segment_ids.size(); i++) 
+        {
+            s.insert(segment_ids[i]);
+        }       
+        
+        for (int i = 0; i < segment_ids.size(); i++) 
+        {
+            if (segment_ids[i] == classifiaction) 
+            {
+                selected_mat.push_back({ MAT_points[i][0],MAT_points[i][1],MAT_points[i][2] });
+            }
+        }
+
+        output("mat").set(selected_mat);
+    }
+    void GetClusterSheets::process() 
+    {
+        std::cout << "Trying to get all the sheets" << std::endl;
+        //-------------input---------------//
+        auto segment_ids = input("segment_ids").get<vec1i>();
+        auto MAT_points = input("ma_coords").get<PointCollection>();
+        //---------output-----------//
+        std::vector<PointCollection> vec_sheets;
+        //-------process------//
+        std::set<int> id_values;
+        for (int i = 0; i < segment_ids.size(); i++)
+        {
+            id_values.insert(segment_ids[i]);            
+        }
+
+        int num = id_values.size();
+
+        for (set<int>::iterator it = id_values.begin(); it != id_values.end(); it++)
+        {
+            PointCollection one_mat_sheet;
+            for (int i = 0; i < segment_ids.size(); i++) 
+            {                
+                if (*it == segment_ids[i]) 
+                {
+                    one_mat_sheet.push_back({ MAT_points[i][0],MAT_points[i][1],MAT_points[i][2] });
+                }
+            }
+            vec_sheets.push_back(one_mat_sheet);
+        }
+                     
+        output("vec_sheets").set(vec_sheets);
+        std::cout << "sheets done" << std::endl;
+        std::cout << "in total:" << vec_sheets.size() << " obtained" << std::endl;
+    }
+    void MATSeparation::process() 
+    {
+        std::cout << "MAT separation starts" << std::endl;
+        // ---------  input ------------//
+        auto vec_sheets = input("vec_sheets").get<std::vector<PointCollection>>();
+        auto points = input("points").get<PointCollection>();
+        int offset = param<float>("offset");
+        // ------------output-----------//
+        PointCollection interior_MAT;
+        PointCollection exterior_MAT;
+        PointCollection unclassified_MAT;
+        //-----------process-------------//
+        // max min height;
+        float max, min;
+        max = points[0][2];
+        min = points[0][2];
+        for (int i = 0;i<points.size();i++) 
+        {
+            if (max < points[i][2]) max = points[i][2];
+            if (min > points[i][2]) min = points[i][2];        
+        }
+        std::cout << "max height:" << max <<","<<"min height:"<<min<< std::endl;
+        
+        for (auto sheet : vec_sheets) 
+        {
+            if (sheet != vec_sheets[0])
+            {
+                int count = 0;
+                for (auto point : sheet)
+                {
+                    if (point[2] > max)
+                    {
+                        count++;
+                    }
+                    if (count > 10)
+                    {
+                        // interior_sheet or interior points
+                        for (auto pt : sheet) {
+                            exterior_MAT.push_back(pt);
+                        }
+                        break;
+                    }
+                }
+                continue;
+            }
+        }
+
+        for (auto sheet : vec_sheets)
+        {
+            if (sheet != vec_sheets[0])
+            {
+                int count = 0;
+                for (auto point : sheet)
+                {
+                    if (point[2] < min)
+                    {
+                        count++;
+                    }
+                    if (count > 10)
+                    {
+                        // interior_sheet or interior points
+                        for (auto pt : sheet) {
+                            interior_MAT.push_back(pt);
+                        }
+                        break;
+                    }
+                }
+                continue;
+            }
+        }
+
+
+
+        output("interior_mat").set(interior_MAT);
+        output("exterior_mat").set(exterior_MAT);
+        output("unclassified_mat").set(unclassified_MAT);
+
+    }
+
     void MATsimplification::process() {
         std::cout << "simplification is running" << std::endl;
         //-------------input----------------//
@@ -444,7 +519,11 @@ namespace geoflow::nodes::mat {
     }
 
     void ComputeNormalsNode::process() {
+        //--------------input----------------//
         auto point_collection = input("points").get<PointCollection>();
+
+        
+
 
         masb::ma_data madata;
         madata.m = point_collection.size();
@@ -459,12 +538,16 @@ namespace geoflow::nodes::mat {
 
         masb::compute_normals(params, madata);
 
+        //std::string filepath = "c:\\users\\tengw\\documents\\git\\Reorien\\las_normal.txt";
+        //std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+
         vec3f normals_vec3f;
         normals_vec3f.reserve(madata.m);
         for (auto& n : *madata.normals) {
             normals_vec3f.push_back({ n[0], n[1], n[2] });
+            //outfile << n[0] << "," << n[1] << "," << n[2] << std::endl;
         }
-
+        //outfile.close();
         output("normals").set(normals_vec3f);
     }
 
@@ -916,9 +999,7 @@ namespace geoflow::nodes::mat {
                 auto sph1 = AMPGPUQueryTest::GetOneLineResult(headvectors[j], endvectors[j], kd);
                 visble_sph.push_back(sph1);
             }
-        }
-
-
+        }        
         
         for (auto item : visble_sph) {
             visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
@@ -1132,7 +1213,7 @@ namespace geoflow::nodes::mat {
 
 
         auto pc = input("original_pc").get<PointCollection>();
-        std::cout << "input pc size" << pc.size() << std::endl;
+        std::cout << "input pc size:" << pc.size() << std::endl;
         //------------output----------------//
         PointCollection visible_pc;
         // ---------process ------------------//
@@ -1167,8 +1248,8 @@ namespace geoflow::nodes::mat {
         th[2] = std::thread(VisiblePC::GetVisblePT, threadvec3, interior_MAT, radii, viewpoint, std::ref(visible_pc));
         th[2].join();
         th[3] = std::thread(VisiblePC::GetVisblePT, threadvec4, interior_MAT, radii, viewpoint, std::ref(visible_pc));
-        th[3].join();*/
-            
+        th[3].join();
+            */
             
                
         GetVisblePT(pc, interior_MAT, radii, viewpoint, visible_pc);
@@ -1343,7 +1424,44 @@ namespace geoflow::nodes::mat {
         std::cout << "Visiblity Qurey Done" << std::endl;
     }
  
-    
+    void WritePC2File::process() 
+    {
+        auto pc = input("points").get<PointCollection>();
+        auto filepath = param<std::string>("filepath");
+        //std::string filepath = "c:\\users\\tengw\\documents\\git\\Reorien\\PC_points.txt";
+        std::ofstream outfile(filepath, std::fstream::out | std::fstream::trunc);
+        for (auto point : pc)
+        {
+            outfile << point[0] << "," << point[1] << "," << point[2] << std::endl;
+        }
+        outfile.close();
+    }
+    void ReadNormal::process() 
+    {
+        //----------input-------//
+        auto filepath = param<std::string>("filepath");
+        //----------output-----------//
+        vec3f normal;
+        // -----------proccess--------//
+        std::ifstream infile(filepath);
+        std::string line;
+        if (infile)
+        {
+            while (getline(infile, line))
+            {
+                std::vector<std::string> result;
+                ReadNormal::split(line, ',', result);
+                float x = ReadNormal::str2num(result[0]);
+                float y = ReadNormal::str2num(result[1]);
+                float z = ReadNormal::str2num(result[2]);
+                normal.push_back({ x,y,z });
+            }
+        }
+        infile.close();
+        std::cout <<"read normal size:" <<normal.size() << std::endl;
+        output("normal").set(normal);
+
+    }
 
 
 }

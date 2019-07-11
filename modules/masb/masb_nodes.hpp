@@ -8,6 +8,8 @@
 #include <amp.h>
 #include<amp_math.h>
 
+
+
 # define M_PI           3.14159265358979323846 
 
 
@@ -148,6 +150,57 @@ namespace geoflow::nodes::mat {
       }
       void process();
   };
+  class MATSeparation: public Node 
+  {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("vec_sheets", typeid(std::vector<PointCollection>));
+          add_input("points", typeid(PointCollection));
+          add_param("offset", (float)1.0);
+          add_output("interior_mat", typeid(PointCollection));
+          add_output("exterior_mat", typeid(PointCollection));
+          add_output("unclassified_mat", typeid(PointCollection));
+
+      }
+      void gui()
+      {
+          ImGui::InputFloat("offset", &param<float>("offset"));
+      }
+      void process();
+
+  };
+  class GetClusterSheets :public Node 
+  {
+  public:
+      using Node::Node;
+      void init()
+      {
+          add_input("segment_ids", typeid(vec1i));
+          add_input("ma_coords", typeid(PointCollection));
+          add_output("vec_sheets", typeid(std::vector<PointCollection>));          
+      }     
+      void process();
+  };
+  class ShowClusterMAT :public Node 
+  {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("segment_ids", typeid(vec1i));
+          add_input("ma_coords", typeid(PointCollection));
+          add_output("mat", typeid(PointCollection));
+          add_param("classification", (int)1);
+      }      
+      void gui()
+      {
+          ImGui::InputInt("classification ", &param<int>("classification"));
+      }
+          
+      void process();
+  };
 
 
 
@@ -171,11 +224,11 @@ namespace geoflow::nodes::mat {
   public:
       using Node::Node;
       void init() {
-          add_input("originalPC", typeid(PointCollection));
+          //add_input("originalPC", typeid(PointCollection));
           add_input("ma_coords", typeid(PointCollection));
           add_input("ma_is_interior", typeid(vec1i));
           add_input("ma_radii", typeid(vec1f));
-          add_input("normals", typeid(vec3f));
+          //add_input("normals", typeid(vec3f));
           //add_input("offset", typeid(float));
           //add_input("min_z", typeid(float));          
           
@@ -494,9 +547,9 @@ namespace geoflow::nodes::mat {
               }
 
               if (visflag == false)continue;
-              mtx2.lock();
+              //mtx2.lock();
               visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
-              mtx2.unlock();
+              //mtx2.unlock();
           }
 
       }
@@ -1275,20 +1328,21 @@ namespace geoflow::nodes::mat {
           Vector3DNew hit;
           int count = 0;
           //--------------------------allpoints-----------------------//          
-          /*bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], v1, v2, hit);
-          if (a == 1) {
+          //bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], v1, v2, hit);
+          //if (a == 1) {
 
-              for (auto pt : (*kd).m_allballs)
-              {
-                  count++;
-                  float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
-                  if (dis <= pt.radius) {
-                      pointlist.push_back(pt.pos);
-                      radiilist.push_back(pt.radius);
-                      indice.push_back(pt.index);
-                  }
-              }
-          } */         
+          //    for (auto pt : (*kd).m_allballs)
+          //    {
+          //        //get intersected balls//
+          //        count++;
+          //        float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
+          //        if (dis <= pt.radius) {
+          //            pointlist.push_back(pt.pos);
+          //            radiilist.push_back(pt.radius);
+          //            indice.push_back(pt.index);
+          //        }
+          //    }
+          //}          
           //------------------------levelpoints--------------------------//
           for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
               bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
@@ -1314,7 +1368,7 @@ namespace geoflow::nodes::mat {
               float minDis = AMPGPUQueryTest::PointToPointDis(v1, pointlist[0]) - radiilist[0];
 
               int flag = 0;
-              for (int i = 0; i < pointlist.size(); i++)
+              for (int i = 1; i < pointlist.size(); i++)
               {
                   float temp = AMPGPUQueryTest::PointToPointDis(v1, pointlist[i]) - radiilist[i];
                   //float temp = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[i]);
@@ -1530,6 +1584,51 @@ namespace geoflow::nodes::mat {
           add_output("visible_parts", typeid(PointCollection));          
       }
       void process();
+  };
+
+  class WritePC2File :public Node {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("points", typeid(PointCollection));
+          add_param("filepath", (std::string) "PC_points.txt");
+          
+      }
+      void gui() {
+          ImGui::InputText("File path", &param<std::string>("filepath"));
+      }
+      void process();
+ 
+  };
+  class ReadNormal :public Node {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_output("normal", typeid(vec3f));
+          add_param("filepath", (std::string) "re_or_normal.txt");
+
+      }
+      void gui() {
+          ImGui::InputText("File path", &param<std::string>("filepath"));
+      }
+      
+      void process();
+      std::vector<std::string> &split(const std::string &str, char delim, std::vector<std::string> &elems, bool skip_empty = true) {
+          std::istringstream iss(str);
+          for (std::string item; getline(iss, item, delim); )
+              if (skip_empty && item.empty()) continue;
+              else elems.push_back(item);
+          return elems;
+      }
+
+      float str2num(std::string num) {
+          float res;
+          std::stringstream stream(num);
+          stream >> res;
+          return res;
+      }
   };
 
 
