@@ -87,7 +87,7 @@ KdTree::KdTree(const Vector3D *positions, unsigned int nOfPositions, unsigned in
     m_max = maximum;
     m_min = minimum;
 
-	createTree(*m_root, 0, nOfPositions, maximum, minimum);
+	createTree(*m_root, 0, nOfPositions, maximum, minimum,false);
 	m_root->createBoundingBox(m_boundingBoxLowCorner, m_boundingBoxHighCorner);
 	setNOfNeighbours(1);
     //std::cout << "Test: KDTree: X " << m_points[0].pos.x << std::endl;
@@ -263,12 +263,7 @@ void KdTree::setNOfNeighbours(const unsigned int newNOfNeighbours) {
 	}
 }
 
-void KdTree::createTree(KdNode &node, int start, int end, Vector3D maximum, Vector3D minimum) {
-    
-    //std::cout <<"index:"<<levelcount<< "Max:" << maximum[0] << "," << maximum[1] << "," << maximum[2]<<std::endl;
-    //std::cout << "index:" << levelcount << "Min:" << minimum[0] << "," << minimum[1] << "," << minimum[2] << std::endl;
-    m_maxpoint.push_back(maximum);
-    m_minpoint.push_back(minimum);
+void KdTree::createTree(KdNode &node, int start, int end, Vector3D maximum, Vector3D minimum, bool if_leaf) {   
     m_currentlevel.push_back(levelcount);
     levelcount++;
 
@@ -320,6 +315,10 @@ void KdTree::createTree(KdNode &node, int start, int end, Vector3D maximum, Vect
 	node.m_children = childNodes;
 	if (mid - start <= m_bucketSize) {
 		// new leaf
+
+        m_maxpoint.push_back(maximum);
+        m_minpoint.push_back(minimum);
+
 		KdLeaf* leaf = new KdLeaf();
 		node.m_children[0] = leaf;
 
@@ -346,12 +345,15 @@ void KdTree::createTree(KdNode &node, int start, int end, Vector3D maximum, Vect
 		node.m_children[0] = childNode;
 		float oldMax = maximum[dim];
 		maximum[dim] = node.m_cutVal;
-		createTree(*childNode, start, mid, maximum, minimum);
+		createTree(*childNode, start, mid, maximum, minimum,false);
 		maximum[dim] = oldMax;
 	}
 
 	if (end - mid <= m_bucketSize) {
 		// new leaf
+        m_maxpoint.push_back(maximum);
+        m_minpoint.push_back(minimum);
+
 		KdLeaf* leaf = new KdLeaf();
 		node.m_children[1] = leaf;
 
@@ -379,7 +381,7 @@ void KdTree::createTree(KdNode &node, int start, int end, Vector3D maximum, Vect
 		minimum[dim] = node.m_cutVal;
 		KdNode* childNode = new KdNode();
 		node.m_children[1] = childNode;
-		createTree(*childNode, mid, end, maximum, minimum);
+		createTree(*childNode, mid, end, maximum, minimum,false);
 	}
     
     

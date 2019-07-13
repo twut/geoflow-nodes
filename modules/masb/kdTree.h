@@ -437,7 +437,7 @@ protected:
 	 * @param minimum
 	 *		  minimum coordinates of the data points
 	 */
-	void createTree(KdNode &node, int start, int end, Vector3D maximum, Vector3D minimum);
+	void createTree(KdNode &node, int start, int end, Vector3D maximum, Vector3D minimum, bool if_leaf);
 
 	
 private:

@@ -600,17 +600,12 @@ namespace geoflow::nodes::mat {
         //////////////////////////////
         //auto indice = input("indice").get<vec1i>();
         auto indice = input("indice").get<std::vector<vec1i>>();
-
         masb::ma_data madata;
         madata.m = point_collection.size();
         m_nPoints = point_collection.size();
         std::cout << "MAT point size:" << madata.m << std::endl;
-
         KdTree::sphere* mp_Points = new KdTree::sphere[m_nPoints];
-
-
         Vector3D* Points = new Vector3D[m_nPoints];
-
 
 
         Vector3D center;
@@ -665,14 +660,18 @@ namespace geoflow::nodes::mat {
 
         
         int new_count = 0;
-        for (int i = (*kd).m_maxpoint.size()-1 ; i >=0; i--)
+        for (int i =0; i<(*kd).m_maxpoint.size() ; i++)
         {
 
-            std::vector<KdTree::sphere> levelpoints = BuildKDtree::NewGetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], &allPointsVec);
+            //std::vector<KdTree::sphere> levelpoints = BuildKDtree::NewGetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], &allPointsVec);
+            std::vector<KdTree::sphere> levelpoints = BuildKDtree::GetLevelPoints((*kd).m_maxpoint[i], (*kd).m_minpoint[i], &allPointsVec);
+
+
             new_count +=levelpoints.size() ;
             //std::cout <<"Number of points in each level:"<< levelpoints.size() << std::endl;
             (*kd).m_levelpoints.push_back(levelpoints);
         }
+        std::cout << "total level points:" << new_count << std::endl;
         std::cout << "KDTree output done" << std::endl;
         
 
@@ -1207,7 +1206,7 @@ namespace geoflow::nodes::mat {
         starttime = clock();
         //-------------input---------------//
         Vector3D viewpoint = input("viewPoint").get<Vector3D>();
-        //auto kdtree = input("KDTree").get<KdTree*>();
+        auto kd = input("KDTree").get<KdTree*>();
         auto interior_MAT = input("interior_MAT").get<PointCollection>();
         auto radii = input("interior_radii").get<vec1f>();
 
@@ -1252,7 +1251,7 @@ namespace geoflow::nodes::mat {
             */
             
                
-        GetVisblePT(pc, interior_MAT, radii, viewpoint, visible_pc);
+        GetVisblePT(pc, kd, viewpoint, visible_pc);
 
        
 

@@ -425,38 +425,35 @@ namespace geoflow::nodes::mat {
           std::cout << "KDTree Built" << std::endl;
           return mp_kdTree;
       }
-      std::vector<int> GetLevelPoints(std::vector<int> vec_long, std::vector<int> vec_short) {
+      float PointBoxDistance(Vector3D max, Vector3D min, Vector3D centre) 
+      {
+          float distance;
+          float x = std::min(abs(max.x - centre.x),abs(min.x-centre.x));
+          float y = std::min(abs(max.y - centre.y), abs(min.y - centre.y));
+          float z = std::min(abs(max.z - centre.z), abs(min.z - centre.z));
+          distance = sqrt(x*x + y * y + z * z);
+          return distance;
+      }
+      /*std::vector<int> GetLevelPoints(std::vector<int> vec_long, std::vector<int> vec_short) {
           std::vector<int> vec_result(20);
           std::vector<int>::iterator it;
           it = std::set_difference(vec_long.begin(), vec_long.end(), vec_short.begin(), vec_short.end(), vec_result.begin());
           vec_result.resize(it - vec_result.begin());
       
           return vec_result;
-      }
+      }*/
 
       std::vector<KdTree::sphere> GetLevelPoints(Vector3D max, Vector3D min, std::vector<KdTree::sphere> *points) {
           std::vector<KdTree::sphere> LevelPoints;       
-          std::vector<KdTree::sphere> diff;
-          std::vector<KdTree::sphere>::iterator it;
+          //std::vector<KdTree::sphere> diff;
+          //std::vector<KdTree::sphere>::iterator it;
           for (auto a:*points){
-              if(a.pos.x<=max.x&&a.pos.x>=min.x)
-                  if(a.pos.y<=max.y&&a.pos.y>=min.y)
-                      if (a.pos.z <= max.z&&a.pos.z >= min.z) {
-                          LevelPoints.push_back(a);
-                          for (it = (*points).begin(); it != (*points).end();) {
-                              if ((*it).pos == a.pos)
-                                  it = (*points).erase(it);
-                              else
-                              {
-                                  ++it;
-                              }
-                          }
-                      }
-              
-          }          
-          /*it = std::set_difference((*points).begin(), (*points).end(), LevelPoints.begin(), LevelPoints.end(), diff.begin());
-          diff.resize(it - diff.begin());
-          *points = diff;*/
+              float dis = PointBoxDistance(max, min, a.pos);
+              if (dis < a.radius) 
+              {
+                  LevelPoints.push_back(a);              
+              }          
+          }        
           return LevelPoints;      
       }
       static bool BoxIntersectsSphere(Vector3D Bmin, Vector3D Bmax, Vector3D C, float r) {
@@ -519,37 +516,43 @@ namespace geoflow::nodes::mat {
           add_input("interior_radii", typeid(vec1f));
           add_input("original_pc", typeid(PointCollection));
           add_input("viewPoint", typeid(Vector3D));
+          add_input("KDTree", typeid(KdTree));
           
           add_output("visible_pc", typeid(PointCollection));
       }
       void process();      
 
-      static void GetVisblePT(std::vector<arr3f> pc, PointCollection interior_MAT,vec1f radii,Vector3D viewpoint,PointCollection &visible_pc)
+      
+
+      // input point cloud
+      static void GetVisblePT(std::vector<arr3f> pc, KdTree* kd,Vector3D v1,PointCollection &visible_pc)
       {
           for (int j = 0; j < pc.size(); j++)
           {
               bool visflag = true;
               Vector3D v2(pc[j][0], pc[j][1], pc[j][2]);
-              for (int i = 0; i < interior_MAT.size(); i++)
-              {
-                  if (i != j) {
-                      Vector3D centre(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]);
-
-                      float dis = DistancePointToSegment(viewpoint, v2, centre);
-                      if (dis < radii[i])
+              Vector3D hit;
+              for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
+                  bool a = CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
+                  if (a == 1) {
+                      //for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1])
+                      for (auto pt : (*kd).m_levelpoints[i])
                       {
-                          visflag = false;
-                          break;
+                          //count++;
+                          float dis = DistancePointToSegment(v1, v2, pt.pos);
+                          if (dis < pt.radius) {
+                              visflag = false;
+                              break;
+                          }
                       }
+                      if (visflag == false) break;
                   }
-                  else
-                      continue;
+              }
+              if (visflag == true) 
+              {
+                  visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
               }
 
-              if (visflag == false)continue;
-              //mtx2.lock();
-              visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
-              //mtx2.unlock();
           }
 
       }
@@ -598,7 +601,7 @@ namespace geoflow::nodes::mat {
               {
                   for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
                       count++;
-                      float dis = DistanceOfPointToLine(v1, v2, pt.pos);
+                      float dis = DistancePointToSegment(v1, v2, pt.pos);
                       if (dis < pt.radius) 
                       {
                           visflag = false;
@@ -615,7 +618,7 @@ namespace geoflow::nodes::mat {
 
       };
       // overload //
-      static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
+      /*static float DistanceOfPointToLine(Vector3D a, Vector3D b, Vector3D s)
       {
           float ab = sqrt(pow((a.x - b.x), 2.0f) + pow((a.y - b.y), 2.0f) + pow((a.z - b.z), 2.0f));
           float as = sqrt(pow((a.x - s.x), 2.0f) + pow((a.y - s.y), 2.0f) + pow((a.z - s.z), 2.0f));
@@ -623,7 +626,7 @@ namespace geoflow::nodes::mat {
           float cos_A = (pow(as, 2.0f) + pow(ab, 2.0f) - pow(bs, 2.0f)) / (2.0f * ab*as);
           float sin_A = sqrt(1.0f - pow(cos_A, 2.0f));
           return as * sin_A;
-      }
+      }*/
       static int inline GetIntersection(float fDst1, float fDst2, Vector3D P1, Vector3D P2, Vector3D &Hit)
       {
           if ((fDst1 * fDst2) >= 0.0f) return 0;
@@ -1346,9 +1349,7 @@ namespace geoflow::nodes::mat {
           //------------------------levelpoints--------------------------//
           for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
               bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
-              if (a == 1) {
-
-                  
+              if (a == 1) {                  
                   for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1])                   
                   {
                       count++;
@@ -1407,7 +1408,7 @@ namespace geoflow::nodes::mat {
           if (Axis == 3 && Hit[0] > B1[0] && Hit[0] < B2[0] && Hit[1] > B1[1] && Hit[1] < B2[1]) return 1;
           return 0;
       }
-      static int CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
+      static int AMPGPUQueryTest::CheckLineBox(Vector3D B1, Vector3D B2, Vector3D L1, Vector3D L2, Vector3D &Hit)
       {
           if (L2[0] < B1[0] && L1[0] < B1[0]) return false;
           if (L2[0] > B2[0] && L1[0] > B2[0]) return false;
