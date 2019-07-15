@@ -33,6 +33,7 @@ namespace geoflow::nodes::mat {
     R->register_node<ReadNormal>("ReadNormal");
     R->register_node<GetClusterSheets>("GetClusterSheets");
     R->register_node<MATSeparation>("MATSeparation");  
+    R->register_node<TreeRemover>("TreeRemover");
        
 
     return R;

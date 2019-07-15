@@ -339,8 +339,10 @@ namespace geoflow::nodes::mat {
         //-------------input---------------//
         auto segment_ids = input("segment_ids").get<vec1i>();
         auto MAT_points = input("ma_coords").get<PointCollection>();
+        auto bisectors = input("ma_bisector").get<vec3f>();
         //---------output-----------//
         std::vector<PointCollection> vec_sheets;
+        std::vector<float> vec_bisectors;
         //-------process------//
         std::set<int> id_values;
         for (int i = 0; i < segment_ids.size(); i++)
@@ -353,18 +355,30 @@ namespace geoflow::nodes::mat {
         for (set<int>::iterator it = id_values.begin(); it != id_values.end(); it++)
         {
             PointCollection one_mat_sheet;
+            float one_sheet_bisector =0;
+
             for (int i = 0; i < segment_ids.size(); i++) 
-            {                
+            {       
+                
                 if (*it == segment_ids[i]) 
                 {
+                    
                     one_mat_sheet.push_back({ MAT_points[i][0],MAT_points[i][1],MAT_points[i][2] });
+                    one_sheet_bisector += bisectors[i][2];
+                    
                 }
+                //one_sheet_bisector = one_sheet_bisector / count;
             }
             vec_sheets.push_back(one_mat_sheet);
+            std::cout << "one sheet bisector value:" << one_sheet_bisector << std::endl;
+            vec_bisectors.push_back(one_sheet_bisector);
         }
                      
         output("vec_sheets").set(vec_sheets);
+        output("vec_bisectors").set(vec_bisectors);
+
         std::cout << "sheets done" << std::endl;
+        std::cout << "bisector group size:" << vec_bisectors.size() << std::endl;
         std::cout << "in total:" << vec_sheets.size() << " obtained" << std::endl;
     }
     void MATSeparation::process() 
@@ -372,71 +386,104 @@ namespace geoflow::nodes::mat {
         std::cout << "MAT separation starts" << std::endl;
         // ---------  input ------------//
         auto vec_sheets = input("vec_sheets").get<std::vector<PointCollection>>();
-        auto points = input("points").get<PointCollection>();
+        auto vec_bisectors = input("vec_bisectors").get<std::vector<float>>();
+        //auto points = input("points").get<PointCollection>();
         int offset = param<float>("offset");
+        
         // ------------output-----------//
         PointCollection interior_MAT;
         PointCollection exterior_MAT;
         PointCollection unclassified_MAT;
         //-----------process-------------//
-        // max min height;
-        float max, min;
-        max = points[0][2];
-        min = points[0][2];
-        for (int i = 0;i<points.size();i++) 
-        {
-            if (max < points[i][2]) max = points[i][2];
-            if (min > points[i][2]) min = points[i][2];        
-        }
-        std::cout << "max height:" << max <<","<<"min height:"<<min<< std::endl;
-        
+        int num = 0;
         for (auto sheet : vec_sheets) 
         {
-            if (sheet != vec_sheets[0])
+            for (auto pt : sheet)
+                num++;
+        }
+        std::cout << "input mat point size:" << num << std::endl;
+
+        for (int i=0;i<vec_bisectors.size();i++) 
+        {
+            if (vec_bisectors[i] < 0) 
             {
-                int count = 0;
-                for (auto point : sheet)
+                std::cout << "ex sheet size:" << vec_sheets[i].size() << std::endl;
+                for (auto pt : vec_sheets[i]) 
                 {
-                    if (point[2] > max)
-                    {
-                        count++;
-                    }
-                    if (count > 10)
-                    {
-                        // interior_sheet or interior points
-                        for (auto pt : sheet) {
-                            exterior_MAT.push_back(pt);
-                        }
-                        break;
-                    }
+                    
+                    exterior_MAT.push_back(pt);
                 }
-                continue;
+                
+            }
+            //if (vec_bisectors[i] >= 0) 
+            else
+            {
+                std::cout << "in sheet size:" << vec_sheets[i].size() << std::endl;
+                for (auto pt : vec_sheets[i])
+                {
+                    interior_MAT.push_back(pt);
+                }
             }
         }
 
-        for (auto sheet : vec_sheets)
-        {
-            if (sheet != vec_sheets[0])
-            {
-                int count = 0;
-                for (auto point : sheet)
-                {
-                    if (point[2] < min)
-                    {
-                        count++;
-                    }
-                    if (count > 10)
-                    {
-                        // interior_sheet or interior points
-                        for (auto pt : sheet) {
-                            interior_MAT.push_back(pt);
-                        }
-                        break;
-                    }
-                }
-                continue;
-            }
-        }
+
+        ////max min height;
+        //float max, min;
+        //max = points[0][2];
+        //min = points[0][2];
+        //for (int i = 0;i<points.size();i++) 
+        //{
+        //    if (max < points[i][2]) max = points[i][2];
+        //    if (min > points[i][2]) min = points[i][2];        
+        //}
+        //std::cout << "max height:" << max <<","<<"min height:"<<min<< std::endl;
+        //
+        //for (auto sheet : vec_sheets) 
+        //{
+        //    if (sheet != vec_sheets[0])
+        //    {
+        //        int count = 0;
+        //        for (auto point : sheet)
+        //        {
+        //            if (point[2] > max)
+        //            {
+        //                count++;
+        //            }
+        //            if (count > 10)
+        //            {                        
+        //                for (auto pt : sheet) {
+        //                    exterior_MAT.push_back(pt);
+        //                }
+        //                break;
+        //            }
+        //        }
+        //        continue;
+        //    }
+        //}
+
+        //for (auto sheet : vec_sheets)
+        //{
+        //    if (sheet != vec_sheets[0])
+        //    {
+        //        int count = 0;
+        //        for (auto point : sheet)
+        //        {
+        //            if (point[2] < min)
+        //            {
+        //                count++;
+        //            }
+        //            if (count > 10)
+        //            {
+        //                // interior_sheet or interior points
+        //                for (auto pt : sheet) {
+        //                    interior_MAT.push_back(pt);
+        //                }
+        //                break;
+        //            }
+        //        }
+        //        continue;
+        //    }
+        //}
 
 
 
@@ -1462,5 +1509,30 @@ namespace geoflow::nodes::mat {
 
     }
 
+    void TreeRemover::process() 
+    {
+        std::cout << "Removing trees..." << std::endl;
+        //--------------input-------------//
+        auto pc = input("points").get<PointCollection>(); 
+        auto classification = input("classification").get<std::vector<int>>();
+        int id = param<int>("number_value");
 
+        //-------------output-------------//
+        PointCollection outpc;
+        //--------process-----------------//
+
+        std::set<int> s;
+        for (int i=0;i<pc.size();i++) 
+        {
+            s.insert(classification[i]);
+            if (classification[i] != id) outpc.push_back(pc[i]);        
+        } 
+        for (set<int>::iterator it = s.begin(); it != s.end(); it++)
+        {
+            std::cout << *it << " occurs " << std::endl;
+        }        
+
+        output("points").set(outpc);
+        std::cout << "Tree removing done." << std::endl;
+    }
 }
