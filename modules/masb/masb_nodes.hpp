@@ -159,10 +159,17 @@ namespace geoflow::nodes::mat {
           add_input("vec_sheets", typeid(std::vector<PointCollection>));
           //add_input("points", typeid(PointCollection));
           add_input("vec_bisectors", typeid(std::vector<float>));
+          add_input("vec_index",typeid(std::vector<vec1i>));
+          add_input("vec_radii", typeid(std::vector<vec1f>));
           add_param("offset", (float)1.0);
           add_output("interior_mat", typeid(PointCollection));
           add_output("exterior_mat", typeid(PointCollection));
           add_output("unclassified_mat", typeid(PointCollection));
+          add_output("in_radii", typeid(vec1f));
+          add_output("ex_radii", typeid(vec1f));
+          add_output("in_index", typeid(vec1i));
+          add_output("ex_index", typeid(vec1i));
+
 
       }
       void gui()
@@ -181,8 +188,11 @@ namespace geoflow::nodes::mat {
           add_input("segment_ids", typeid(vec1i));
           add_input("ma_coords", typeid(PointCollection));
           add_input("ma_bisector", typeid(vec3f));
+          add_input("ma_radii", typeid(vec1f));
           add_output("vec_sheets", typeid(std::vector<PointCollection>));   
           add_output("vec_bisectors", typeid(std::vector<float>));
+          add_output("vec_radii", typeid(std::vector<vec1f>));
+          add_output("vec_index", typeid(std::vector<vec1i>));
       }     
       void process();
   };

@@ -340,9 +340,12 @@ namespace geoflow::nodes::mat {
         auto segment_ids = input("segment_ids").get<vec1i>();
         auto MAT_points = input("ma_coords").get<PointCollection>();
         auto bisectors = input("ma_bisector").get<vec3f>();
+        auto radii = input("ma_radii").get<vec1f>();
         //---------output-----------//
         std::vector<PointCollection> vec_sheets;
         std::vector<float> vec_bisectors;
+        std::vector<vec1f> vec_radii;
+        std::vector<vec1i> vec_index;
         //-------process------//
         std::set<int> id_values;
         for (int i = 0; i < segment_ids.size(); i++)
@@ -356,6 +359,8 @@ namespace geoflow::nodes::mat {
         {
             PointCollection one_mat_sheet;
             float one_sheet_bisector =0;
+            vec1f one_radii;
+            vec1i one_index;
 
             for (int i = 0; i < segment_ids.size(); i++) 
             {       
@@ -365,17 +370,23 @@ namespace geoflow::nodes::mat {
                     
                     one_mat_sheet.push_back({ MAT_points[i][0],MAT_points[i][1],MAT_points[i][2] });
                     one_sheet_bisector += bisectors[i][2];
+                    one_index.push_back(i);
+                    one_radii.push_back(radii[i]);
                     
                 }
                 //one_sheet_bisector = one_sheet_bisector / count;
             }
             vec_sheets.push_back(one_mat_sheet);
+            vec_index.push_back(one_index);
+            vec_radii.push_back(one_radii);
             std::cout << "one sheet bisector value:" << one_sheet_bisector << std::endl;
             vec_bisectors.push_back(one_sheet_bisector);
         }
                      
         output("vec_sheets").set(vec_sheets);
         output("vec_bisectors").set(vec_bisectors);
+        output("vec_radii").set(vec_radii);
+        output("vec_index").set(vec_index);
 
         std::cout << "sheets done" << std::endl;
         std::cout << "bisector group size:" << vec_bisectors.size() << std::endl;
@@ -387,6 +398,9 @@ namespace geoflow::nodes::mat {
         // ---------  input ------------//
         auto vec_sheets = input("vec_sheets").get<std::vector<PointCollection>>();
         auto vec_bisectors = input("vec_bisectors").get<std::vector<float>>();
+        auto vec_radii = input("vec_radii").get<std::vector<vec1f>>();
+        auto vec_index = input("vec_index").get<std::vector<vec1i>>();
+
         //auto points = input("points").get<PointCollection>();
         int offset = param<float>("offset");
         
@@ -394,6 +408,14 @@ namespace geoflow::nodes::mat {
         PointCollection interior_MAT;
         PointCollection exterior_MAT;
         PointCollection unclassified_MAT;
+
+        
+        vec1f ex_radii;
+        vec1f in_radii;
+        vec1i in_index;
+        vec1i ex_index;
+
+
         //-----------process-------------//
         int num = 0;
         for (auto sheet : vec_sheets) 
@@ -407,21 +429,38 @@ namespace geoflow::nodes::mat {
         {
             if (vec_bisectors[i] < 0) 
             {
-                std::cout << "ex sheet size:" << vec_sheets[i].size() << std::endl;
+                //std::cout << "ex sheet size:" << vec_sheets[i].size() << std::endl;
                 for (auto pt : vec_sheets[i]) 
                 {
                     
                     exterior_MAT.push_back(pt);
+                    
+                }
+                for (auto r : vec_radii[i]) 
+                {
+                    ex_radii.push_back(r);
+                }
+                for (auto id : vec_index[i]) 
+                {
+                    ex_index.push_back(id);
                 }
                 
             }
             //if (vec_bisectors[i] >= 0) 
             else
             {
-                std::cout << "in sheet size:" << vec_sheets[i].size() << std::endl;
+                //std::cout << "in sheet size:" << vec_sheets[i].size() << std::endl;
                 for (auto pt : vec_sheets[i])
                 {
                     interior_MAT.push_back(pt);
+                }
+                for (auto r : vec_radii[i])
+                {
+                    in_radii.push_back(r);
+                }
+                for (auto id : vec_index[i])
+                {
+                    in_index.push_back(id);
                 }
             }
         }
@@ -490,6 +529,10 @@ namespace geoflow::nodes::mat {
         output("interior_mat").set(interior_MAT);
         output("exterior_mat").set(exterior_MAT);
         output("unclassified_mat").set(unclassified_MAT);
+        output("in_radii").set(in_radii);
+        output("ex_radii").set(ex_radii);
+        output("in_index").set(in_index);
+        output("ex_index").set(ex_index);
 
     }
 
