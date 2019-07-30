@@ -464,65 +464,7 @@ namespace geoflow::nodes::mat {
                 }
             }
         }
-
-
-        ////max min height;
-        //float max, min;
-        //max = points[0][2];
-        //min = points[0][2];
-        //for (int i = 0;i<points.size();i++) 
-        //{
-        //    if (max < points[i][2]) max = points[i][2];
-        //    if (min > points[i][2]) min = points[i][2];        
-        //}
-        //std::cout << "max height:" << max <<","<<"min height:"<<min<< std::endl;
-        //
-        //for (auto sheet : vec_sheets) 
-        //{
-        //    if (sheet != vec_sheets[0])
-        //    {
-        //        int count = 0;
-        //        for (auto point : sheet)
-        //        {
-        //            if (point[2] > max)
-        //            {
-        //                count++;
-        //            }
-        //            if (count > 10)
-        //            {                        
-        //                for (auto pt : sheet) {
-        //                    exterior_MAT.push_back(pt);
-        //                }
-        //                break;
-        //            }
-        //        }
-        //        continue;
-        //    }
-        //}
-
-        //for (auto sheet : vec_sheets)
-        //{
-        //    if (sheet != vec_sheets[0])
-        //    {
-        //        int count = 0;
-        //        for (auto point : sheet)
-        //        {
-        //            if (point[2] < min)
-        //            {
-        //                count++;
-        //            }
-        //            if (count > 10)
-        //            {
-        //                // interior_sheet or interior points
-        //                for (auto pt : sheet) {
-        //                    interior_MAT.push_back(pt);
-        //                }
-        //                break;
-        //            }
-        //        }
-        //        continue;
-        //    }
-        //}
+                       
 
 
 
@@ -1291,6 +1233,7 @@ namespace geoflow::nodes::mat {
     void VisiblePC::process() 
     {
         std::cout << "Visible PC query starts" << std::endl;
+        std::cout << "Using KD-tree:" << if_checkbox<<std::endl ;
 
         clock_t starttime, endtime;
         starttime = clock();
@@ -1340,11 +1283,14 @@ namespace geoflow::nodes::mat {
         th[3].join();
             */
             
-               
-        GetVisblePT(pc, kd, viewpoint, visible_pc);
-
-       
-
+        if (if_checkbox == true) 
+        {
+            GetVisblePT(pc, kd, viewpoint, visible_pc);
+        }
+        else 
+        {
+            GetVisblePTWithoutKD(pc, viewpoint, interior_MAT,radii,visible_pc);
+        }       
         endtime = clock();
 
         //outfile.close();

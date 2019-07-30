@@ -533,6 +533,10 @@ namespace geoflow::nodes::mat {
           
           add_output("visible_pc", typeid(PointCollection));
       }
+      bool if_checkbox = true;
+      void gui() {
+          ImGui::Checkbox("Using KD Tree", &if_checkbox);
+      }
       void process();      
 
       
@@ -569,6 +573,36 @@ namespace geoflow::nodes::mat {
           }
 
       }
+
+      static void GetVisblePTWithoutKD(std::vector<arr3f> pc, Vector3D v1,PointCollection in_MAT, vec1f radii, PointCollection &visible_pc)
+      {
+          for (int j = 0; j < pc.size(); j++)
+          {
+              bool visflag = true;
+              Vector3D v2(pc[j][0], pc[j][1], pc[j][2]);
+              Vector3D hit;
+
+              for (int i = 0; i < in_MAT.size(); i++) {
+                  if (i != j) {
+                      Vector3D centre(in_MAT[i][0], in_MAT[i][1], in_MAT[i][2]);
+                      float dis = DistancePointToSegment(v1, v2, centre);
+                      if (dis <radii[i]) 
+                      {
+                          visflag = false;
+                          break;
+                      }                      
+                  }
+                  if (visflag == false) break;
+              }
+              if (visflag == true)
+              {
+                  visible_pc.push_back({ pc[j][0], pc[j][1], pc[j][2] });
+              }
+
+          }
+
+      }
+
 
       static float PointToPointDis(Vector3D p1, Vector3D p2) 
       {
