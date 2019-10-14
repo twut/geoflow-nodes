@@ -23,6 +23,7 @@ namespace geoflow::nodes::mat {
     R->register_node<AMPGPUQueryTest>("GPUQuery");
     R->register_node<FromMATtoPointCloud>("FromMATtoPoints");
     R->register_node<VisiblePC>("GetVisiblePC");
+    //R->register_node<VisiblePC>("BruteForce");
     R->register_node<ParallelVector>("ParallelVector");    
     R->register_node<GetRaysResult>("GetRaysResult");
     R->register_node<VisiblePart>("GetVisiblePart");
@@ -34,7 +35,10 @@ namespace geoflow::nodes::mat {
     R->register_node<GetClusterSheets>("GetClusterSheets");
     R->register_node<MATSeparation>("MATSeparation");  
     R->register_node<TreeRemover>("TreeRemover");
-       
+    R->register_node<RadialRaysGenerator>("RadialRaysGenerator");
+    R->register_node<GetRadialRayResults>("GetRadialRayResults");
+    R->register_node<VisiblePCbyRTree>("VisiblePCbyRTree");
+    
 
     return R;
   }

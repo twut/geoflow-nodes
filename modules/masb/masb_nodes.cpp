@@ -15,6 +15,7 @@ namespace geoflow::nodes::mat {
     
 
     void ComputeMedialAxisNode::process() {
+        std::cout << "computing MAT " << std::endl;
         auto point_collection = input("points").get<PointCollection>();
         auto normals_vec3f = input("normals").get<vec3f>();
 
@@ -24,6 +25,7 @@ namespace geoflow::nodes::mat {
         params.denoise_planar = param<float>("denoise_planar");
         params.nan_for_initr = param<bool>("nan_for_initr");
 
+        //std::cout << "where is the error " << std::endl;
         // prepare data structures and transfer data
         masb::ma_data madata;
         madata.m = point_collection.size();
@@ -33,6 +35,9 @@ namespace geoflow::nodes::mat {
         for (auto& p : point_collection) {
             coords.push_back(masb::Point(p.data()));
         }
+
+        std::cout << "where is the error " << std::endl;
+
         masb::VectorList normals;
         normals.reserve(madata.m);
         for (auto& n : normals_vec3f) {
@@ -105,6 +110,8 @@ namespace geoflow::nodes::mat {
         output("ma_spoke_f1").set(ma_spoke_f1);
         output("ma_spoke_f2").set(ma_spoke_f2);
         output("ma_spokecross").set(ma_spokecross);
+
+        std::cout << "computing MAT done" << std::endl;
     }
 
 
@@ -348,12 +355,17 @@ namespace geoflow::nodes::mat {
         std::vector<vec1i> vec_index;
         //-------process------//
         std::set<int> id_values;
+        
+        //std::cout << "size of ALL MAT points:" << MAT_points.size() << std::endl;
+        //std::cout << "size of segment_id:" << segment_ids.size() << std::endl;
+        // segment_id is the cluster id of all MAT, size = size of ALL MAT
+
         for (int i = 0; i < segment_ids.size(); i++)
         {
             id_values.insert(segment_ids[i]);            
         }
 
-        int num = id_values.size();
+        int num = id_values.size(); // how many different clusters generated
 
         for (set<int>::iterator it = id_values.begin(); it != id_values.end(); it++)
         {
@@ -425,7 +437,7 @@ namespace geoflow::nodes::mat {
         }
         std::cout << "input mat point size:" << num << std::endl;
 
-        for (int i=0;i<vec_bisectors.size();i++) 
+        for (int i=1;i<vec_bisectors.size();i++) 
         {
             if (vec_bisectors[i] < 0) 
             {
@@ -627,6 +639,9 @@ namespace geoflow::nodes::mat {
 
     void BuildKDtree::process()
     {
+        clock_t starttime, endtime;
+        starttime = clock();
+
         auto point_collection = input("points").get<PointCollection>();
         auto radii = input("radii").get<vec1f>();
         //////////////////////////////
@@ -731,7 +746,8 @@ namespace geoflow::nodes::mat {
         
  
         output("KDTree").set(kd);
-        
+        endtime = clock();
+        std::cout << "KD-Tree running time:" << endtime - starttime << std::endl;
     }
     
     void AMPGPUQueryTest::process() {
@@ -994,6 +1010,63 @@ namespace geoflow::nodes::mat {
         std::cout << "Multiple threads running time:" << endtime - starttime << std::endl;
 
     }
+    void GetRadialRayResults::process() 
+    {
+        std::cout << "get radial rays result starts" << std::endl;
+        clock_t starttime, endtime;
+        starttime = clock();
+        // ---------------input -------------------//
+        auto kd = input("KDTree").get<KdTree*>();
+        auto point_collection = input("MATpoints").get<PointCollection>();
+        auto radii = input("radii").get<vec1f>();
+        auto viewpoint = input("viewpoint").get<Vector3D>();
+        auto radial_vectors = input("radial_rays").get<std::vector<Vector3D>>();
+        std::cout << "number of rays:" << radial_vectors.size()<< std::endl;
+        // ----------------- output -----------------//
+        std::vector<KdTree::sphere> visble_sph;
+
+        PointCollection visible_mat;
+        vec1f visible_radii;
+        vec1i visible_indice;
+
+        //----------process------------//
+        std::vector<bool> ifinter;
+
+        for (int j = 0; j < radial_vectors.size(); j++)
+        {
+            Vector3D hit;
+            bool inter = GetRaysResult::CheckLineBox((*kd).m_min, (*kd).m_max, viewpoint, radial_vectors[j], hit);
+            ifinter.push_back(inter);
+        }
+        int count_intersect = 0;
+        for (int j = 0; j < radial_vectors.size(); j++)
+        {
+            if (ifinter[j] == 1)
+            {
+                count_intersect++;
+                auto sph1 = AMPGPUQueryTest::GetOneLineResult(viewpoint, radial_vectors[j], kd);
+                visble_sph.push_back(sph1);
+            }
+        }
+        std::cout << "!!!!! number of intersection:" << count_intersect << std::endl;
+
+        for (auto item : visble_sph) {
+            visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
+            visible_radii.push_back(item.radius);
+            for (auto idx : item.index)
+                visible_indice.push_back(idx);
+        }
+
+        std::cout <<"vis_id size"<< visible_indice.size() << std::endl;
+
+        endtime = clock();
+
+        output("MAT_points").set(visible_mat);
+        output("radii").set(visible_radii);
+        output("indice").set(visible_indice);
+        std::cout << "Get rays result running time:" << endtime - starttime << std::endl;
+        
+    }
     void GetRaysResult::process()
     {
         std::cout << "get rays result starts" << std::endl;
@@ -1005,6 +1078,7 @@ namespace geoflow::nodes::mat {
         auto radii = input("radii").get<vec1f>();
         auto headvectors = input("Headvectors").get<std::vector<Vector3D>>();
         auto endvectors = input("Endvectors").get<std::vector<Vector3D>>();
+        std::cout << "the number of rays: " << endvectors.size() << std::endl;
         //-------output-------------------//
         std::vector<KdTree::sphere> visble_sph;
 
@@ -1019,19 +1093,21 @@ namespace geoflow::nodes::mat {
         for (int j = 0; j < headvectors.size(); j++) 
         {
             Vector3D hit;
-            bool inter = CheckLineBox((*kd).m_minpoint[0],(*kd).m_maxpoint[0],headvectors[j], endvectors[j],hit);
+            bool inter = CheckLineBox((*kd).m_min,(*kd).m_max,headvectors[j], endvectors[j],hit);
             ifinter.push_back(inter);
         }
 
+        int count_intersect = 0;
         for (int j = 0; j < headvectors.size(); j++) 
         {
             if (ifinter[j] == 1) 
             {
+                count_intersect++;
                 auto sph1 = AMPGPUQueryTest::GetOneLineResult(headvectors[j], endvectors[j], kd);
                 visble_sph.push_back(sph1);
             }
         }        
-        
+        std::cout << "!!!!! number of intersection:" << count_intersect << std::endl;
         for (auto item : visble_sph) {
             visible_mat.push_back({ item.pos.x,item.pos.y,item.pos.z });
             visible_radii.push_back(item.radius);
@@ -1230,6 +1306,95 @@ namespace geoflow::nodes::mat {
         output("Points").set(resultPoints);
         outfile.close();
     }
+    void VisiblePCbyRTree::process()
+    {
+        std::cout << "Visible PC query by RTree starts " << std::endl;
+        clock_t starttime, endtime;
+        starttime = clock();
+        ////---------------------input----------------------------//
+        Vector3D viewpoint = input("viewPoint").get<Vector3D>();
+        auto interior_MAT = input("interior_MAT").get<PointCollection>();
+        auto radii = input("interior_radii").get<vec1f>();
+        auto pc = input("original_pc").get<PointCollection>();
+        auto in_idx = input("in_index").get<vec1i>();
+        std::cout << "size of interior MAT" << interior_MAT.size() << std::endl;
+        std::cout << "size of in_idx" << in_idx.size() << std::endl;
+
+        std::cout << "input pc size:" << pc.size() << std::endl;
+        ////-------------output -----------------------//
+        PointCollection visible_pc;
+
+        //std::vector<int> vec_result_id;
+        std::set<int>  vec_result_id2;
+
+        ////-----------------process-------------------//
+
+        
+        namespace bg = boost::geometry;
+        namespace bgi = boost::geometry::index;
+        typedef bg::model::point<float, 3, bg::cs::cartesian> point;
+        typedef bg::model::box<point> box;
+        typedef bg::model::segment<point> seg;
+        typedef std::pair<box, unsigned> value;
+
+        // create the rtree using default constructor
+        bgi::rtree< value, bgi::quadratic<16> > rtree;
+
+        for (int i = 0; i < interior_MAT.size(); i++)
+        {
+            box b(point(interior_MAT[i][0] - radii[i], interior_MAT[i][1] - radii[i], interior_MAT[i][2] - radii[i]), point(interior_MAT[i][0] + radii[i], interior_MAT[i][1] + radii[i], interior_MAT[i][2] + radii[i]));
+            rtree.insert(std::make_pair(b, i));
+        }
+        std::cout << "RTree node inserted done!" << std::endl;
+        for (int i = 0; i < interior_MAT.size(); i++) 
+        {
+            std::vector<value> result_s;
+            seg query_seg(point(viewpoint[0], viewpoint[1], viewpoint[2]), point(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]));
+            rtree.query(bgi::intersects(query_seg), std::back_inserter(result_s));
+
+            if (result_s.size() == 0)
+                std::cout << "no box intersection!" << "ID" << i << std::endl;      
+            if (result_s.size() == 1)
+                std::cout << "only intersect with target pt itself!" << i << std::endl;
+
+            //int result_id = result_s[0].second;
+            int result_id = i;
+            float min_dis = PointToPointDis(viewpoint, Vector3D(interior_MAT[result_id][0], interior_MAT[result_id][1], interior_MAT[result_id][2])) - radii[result_id];
+           
+            for (auto item : result_s) 
+            {                                
+                int id = item.second;
+                if (DistancePointToSegment(viewpoint, Vector3D(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2]), Vector3D(interior_MAT[id][0], interior_MAT[id][1], interior_MAT[id][2]))< radii[id])
+                {
+                    float current_dis = PointToPointDis(viewpoint, Vector3D(interior_MAT[id][0], interior_MAT[id][1], interior_MAT[id][2])) -radii[id];
+                    if (current_dis < min_dis)
+                    {
+                        result_id = id;
+                        min_dis = current_dis;
+                    }
+                }
+            }
+            //vec_result_id.push_back(result_id);     
+            vec_result_id2.insert(in_idx[result_id]);
+        }
+
+        //std::cout << "Size of vector result id: " << vec_result_id.size() << std::endl;
+
+        for (auto id : vec_result_id2) 
+        {
+            if (id > pc.size())            
+                id = id - pc.size();            
+            visible_pc.push_back(pc[id]);
+        }
+
+        //std::cout << "Size of set: " << vec_result_id2.size() << std::endl;
+        std::cout << "Size of visible pc: " << visible_pc.size() << std::endl;
+        endtime = clock();
+        std::cout << "running time:" << endtime - starttime <<"ms"<< std::endl;
+        output("visible_pc").set(visible_pc);
+        
+
+    }
     void VisiblePC::process() 
     {
         std::cout << "Visible PC query starts" << std::endl;
@@ -1246,7 +1411,7 @@ namespace geoflow::nodes::mat {
 
         auto pc = input("original_pc").get<PointCollection>();
         std::cout << "input pc size:" << pc.size() << std::endl;
-        //------------output----------------//
+        //------------output----------------//       
         PointCollection visible_pc;
         // ---------process ------------------//
 
@@ -1354,6 +1519,7 @@ namespace geoflow::nodes::mat {
 
         output("Headvectors").set(Headvectors);
         output("Endvectors").set(Endvectors);
+        std::cout << "number of parallel rays:" << Headvectors.size() << std::endl;
         std::cout << "sight vectors done" << std::endl;
     }
     void VisiblePart::process()     
@@ -1374,7 +1540,7 @@ namespace geoflow::nodes::mat {
             Vector3D hit;
 
             //------------Chech each point visibility ---------//
-            bool inter = GetRaysResult::CheckLineBox((*kd).m_minpoint[0], (*kd).m_maxpoint[0], viewpoint, v2, hit);
+            bool inter = GetRaysResult::CheckLineBox((*kd).m_min, (*kd).m_max, viewpoint, v2, hit);
             if (inter==0) 
             {
                 vis_PC.push_back({v2[0],v2[1],v2[2]});

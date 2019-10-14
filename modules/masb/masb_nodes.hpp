@@ -1,13 +1,19 @@
 #include <geoflow/core/geoflow.hpp>
 #include"kdTree.h"
 #include "Vector3DNew.h"
+//#include <RTree.h>
 #include <compute_ma_processing.h>
 #include <compute_normals_processing.h>
 #include <thread>
 #include <mutex>
 #include <amp.h>
-#include<amp_math.h>
-
+#include <amp_math.h>
+//-------------boost RTree---------------//
+#include <boost/geometry/index/rtree.hpp>
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point.hpp>
+#include <boost/geometry/geometries/box.hpp>
+#include <boost/geometry/geometries/segment.hpp>
 
 
 # define M_PI           3.14159265358979323846 
@@ -45,7 +51,11 @@ namespace geoflow::nodes::mat {
           
           for (int idx : vis_idx)
           {
-              //std::cout << idx << std::endl;
+              
+              if (idx >= input_points.size()) 
+              {
+                  idx = idx - input_points.size();
+              }            
               output_points.push_back(input_points[idx]);
           }
 
@@ -464,7 +474,7 @@ namespace geoflow::nodes::mat {
               float dis = PointBoxDistance(max, min, a.pos);
               if (dis < a.radius) 
               {
-                  LevelPoints.push_back(a);              
+                  LevelPoints.push_back(a); 
               }          
           }        
           return LevelPoints;      
@@ -518,6 +528,55 @@ namespace geoflow::nodes::mat {
 
       void process();
   };
+  class VisiblePCbyRTree : public Node 
+  {
+  public:
+      using Node::Node;
+      //std::vector<int> m_result_id;
+      void  init() 
+      {
+          add_input("interior_MAT", typeid(PointCollection));
+          add_input("interior_radii", typeid(vec1f));
+          add_input("original_pc", typeid(PointCollection));
+          add_input("viewPoint", typeid(Vector3D));
+          add_input("in_index", typeid(vec1i));
+          add_output("visible_pc", typeid(PointCollection));
+      }
+      void gui() 
+      {
+      }
+      void process();
+      static inline float dotProduct(const Vector3D &a, const Vector3D &b)
+      {
+          return(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+      }
+      static float PointToPointDis(Vector3D p1, Vector3D p2)
+      {
+          float dis = sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y) + (p1.z - p2.z)*(p1.z - p2.z));
+          return dis;
+      }
+      static float DistancePointToSegment(Vector3D v1, Vector3D v2, Vector3D centre)
+      {
+          //v1 viewpoint v2 pt in pc;
+
+
+          Vector3D v_12 = v2 - v1;
+          Vector3D v_1c = centre - v1;
+          float f = dotProduct(v_12, v_1c);
+          if (f < 0)
+              return PointToPointDis(v1, centre);
+
+          float d = dotProduct(v_12, v_12);
+          if (f >= d)
+              return PointToPointDis(v2, centre);
+
+          f = f / d;
+          Vector3D D = v1 + f * v_12;
+          return PointToPointDis(centre, D);
+
+      }
+      
+  };
   class VisiblePC :public Node 
   {
   public:
@@ -544,6 +603,8 @@ namespace geoflow::nodes::mat {
       // input point cloud
       static void GetVisblePT(std::vector<arr3f> pc, KdTree* kd,Vector3D v1,PointCollection &visible_pc)
       {
+          clock_t starttime, endtime;
+          starttime = clock();
           for (int j = 0; j < pc.size(); j++)
           {
               bool visflag = true;
@@ -552,7 +613,7 @@ namespace geoflow::nodes::mat {
               for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
                   bool a = CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
                   if (a == 1) {
-                      //for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1])
+                      
                       for (auto pt : (*kd).m_levelpoints[i])
                       {
                           //count++;
@@ -646,7 +707,10 @@ namespace geoflow::nodes::mat {
               bool a = CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
               if (a == 1) 
               {
-                  for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) {
+                  
+                  //for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) 
+                  for(auto pt : (*kd).m_levelpoints[i])
+                  {
                       count++;
                       float dis = DistancePointToSegment(v1, v2, pt.pos);
                       if (dis < pt.radius) 
@@ -885,6 +949,108 @@ namespace geoflow::nodes::mat {
           
       }
   };
+  
+
+  class RadialRaysGenerator :public Node {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("viewpoint", typeid(Vector3D));
+          add_param("Radius", (float)5.0);
+          add_param("Density", (float)100.0);
+          add_output("radial_rays", typeid(std::vector<Vector3D>));
+          add_output("radial_points", typeid(PointCollection));
+      }
+      void gui() 
+      {
+          ImGui::InputFloat("Radius", &param<float>("Radius"));
+          ImGui::InputFloat("Density", &param<float>("Density"));
+      }
+      void process() 
+      {
+          auto viewpoint = input("viewpoint").get<Vector3D>();
+          float r = param<float>("Radius");
+          float density = param<float>("Density");
+          std::vector<Vector3D> radial_vec;
+          PointCollection radial_points;
+
+          SpherePoints(viewpoint, r, density, &radial_vec, &radial_points);
+          std::cout << "Number of radial rays:" << radial_vec.size() << std::endl;
+          output("radial_rays").set(radial_vec);
+          output("radial_points").set(radial_points);
+
+      };
+      void SpherePoints(Vector3D v1, float radius, float Density, std::vector<Vector3D>* radial_vec, PointCollection* radial_points  )
+      {
+          Vector3D point;
+          int nLongitude = Density;
+          int nLatitude = 2 * nLongitude;
+          int p, s, i, j;
+          float x, y, z, out;
+          int nPitch = nLongitude + 1;
+          float DEGS_TO_RAD = 3.14159f / 180.0f;
+
+          float pitchInc = (180. / (float)nPitch) * DEGS_TO_RAD;
+          float rotInc = (360. / (float)nLatitude) * DEGS_TO_RAD;
+          for (p = 1; p < nPitch; p++)     // Generate all "intermediate vertices":
+          {
+              out = radius * sin((float)p * pitchInc);
+              if (out < 0) out = -out;    // abs() command won't work with all compilers
+              y = radius * cos(p * pitchInc);
+              //printf("OUT = %g\n", out);    // bottom vertex
+              //printf("nPitch = %d\n", nPitch);    // bottom vertex
+              for (s = 0; s < nLatitude; s++)
+              {
+                  x = out * cos(s * rotInc);
+                  z = out * sin(s * rotInc);
+                  point.x = x + v1.x;
+                  point.y = y + v1.y;
+                  point.z = z + v1.z;
+                  //outfile << x + pt.x << "," << y + pt.y << "," << z + pt.z << std::endl;
+                  //numVertices++;
+                  (*radial_vec).push_back(point);
+                  (*radial_points).push_back({ point.x, point.y, point.z });
+              }
+          }
+          
+          
+      }
+      static std::vector<Vector3D> SpherePoints(Vector3D v1, float radius) {
+          std::vector<Vector3D> points;
+          Vector3D point;
+          int nLongitude = 100;
+          int nLatitude = 2 * nLongitude;
+          int p, s, i, j;
+          float x, y, z, out;
+          int nPitch = nLongitude + 1;
+          float DEGS_TO_RAD = 3.14159f / 180.0f;
+
+          float pitchInc = (180. / (float)nPitch) * DEGS_TO_RAD;
+          float rotInc = (360. / (float)nLatitude) * DEGS_TO_RAD;
+          for (p = 1; p < nPitch; p++)     // Generate all "intermediate vertices":
+          {
+              out = radius * sin((float)p * pitchInc);
+              if (out < 0) out = -out;    // abs() command won't work with all compilers
+              y = radius * cos(p * pitchInc);
+              //printf("OUT = %g\n", out);    // bottom vertex
+              //printf("nPitch = %d\n", nPitch);    // bottom vertex
+              for (s = 0; s < nLatitude; s++)
+              {
+                  x = out * cos(s * rotInc);
+                  z = out * sin(s * rotInc);
+                  point.x = x + v1.x;
+                  point.y = y + v1.y;
+                  point.z = z + v1.z;
+                  //outfile << x + pt.x << "," << y + pt.y << "," << z + pt.z << std::endl;
+                  //numVertices++;
+                  points.push_back(point);
+              }
+          }
+          return points;
+      }
+
+  };
   class Triangulation :public Node {
   public:
       using Node::Node;
@@ -1029,6 +1195,29 @@ namespace geoflow::nodes::mat {
       }
 
   };
+
+  //Radial Rays
+  class GetRadialRayResults :public Node
+  {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("radial_rays", typeid(std::vector<Vector3D>));
+          add_input("viewpoint", typeid(Vector3D));
+          add_input("KDTree", typeid(KdTree));
+          add_input("MATpoints", typeid(PointCollection));
+          add_input("radii", typeid(vec1f));
+
+          add_output("MAT_points", typeid(PointCollection));
+          add_output("radii", typeid(vec1f));
+          add_output("indice", typeid(vec1i));
+      }
+      void process();
+
+  };
+
+  //Parallel Rays
   class GetRaysResult : public Node 
   {
   public:
@@ -1396,8 +1585,9 @@ namespace geoflow::nodes::mat {
           //------------------------levelpoints--------------------------//
           for (int i = 0; i < (*kd).m_maxpoint.size(); i++) {
               bool a = AMPGPUQueryTest::CheckLineBox((*kd).m_minpoint[i], (*kd).m_maxpoint[i], v1, v2, hit);
-              if (a == 1) {                  
-                  for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1])                   
+              if (a == 1) {   
+                  //for (auto pt : (*kd).m_levelpoints[(*kd).m_maxpoint.size() - i - 1]) 
+                  for (auto pt : (*kd).m_levelpoints[i])
                   {
                       count++;
                       float dis = VisibiltyQurey::DistanceOfPointToLine(v1, v2, pt.pos);
@@ -1410,6 +1600,7 @@ namespace geoflow::nodes::mat {
               }
           }
           //------------------------------------------------//
+          //std::cout << " point list size:" << pointlist.size() << std::endl;
           if (pointlist.size() > 0) {
               //std::cout << "----------------this direction has :" << pointlist.size() << "  intersected" << std::endl;
               //float minDis = MutiThreadsOneQuery::PointToPointDis(v1, pointlist[0]);
