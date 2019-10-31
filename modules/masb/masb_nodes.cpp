@@ -1309,7 +1309,7 @@ namespace geoflow::nodes::mat {
     void VisiblePCbyRTree::process()
     {
         std::cout << "Visible PC query by RTree starts " << std::endl;
-        clock_t starttime, endtime;
+        clock_t starttime, endtime, endtimeRTree;
         starttime = clock();
         ////---------------------input----------------------------//
         Vector3D viewpoint = input("viewPoint").get<Vector3D>();
@@ -1327,9 +1327,7 @@ namespace geoflow::nodes::mat {
         //std::vector<int> vec_result_id;
         std::set<int>  vec_result_id2;
 
-        ////-----------------process-------------------//
-
-        
+        ////-----------------process-------------------//        
         namespace bg = boost::geometry;
         namespace bgi = boost::geometry::index;
         typedef bg::model::point<float, 3, bg::cs::cartesian> point;
@@ -1346,6 +1344,8 @@ namespace geoflow::nodes::mat {
             rtree.insert(std::make_pair(b, i));
         }
         std::cout << "RTree node inserted done!" << std::endl;
+        endtimeRTree = clock();
+        std::cout << "Running time of RTree construction: " << endtimeRTree - starttime << std::endl;
         for (int i = 0; i < interior_MAT.size(); i++) 
         {
             std::vector<value> result_s;
@@ -1359,7 +1359,7 @@ namespace geoflow::nodes::mat {
 
             //int result_id = result_s[0].second;
             int result_id = i;
-            float min_dis = PointToPointDis(viewpoint, Vector3D(interior_MAT[result_id][0], interior_MAT[result_id][1], interior_MAT[result_id][2])) - radii[result_id];
+            float min_dis = PointToPointDis(viewpoint, Vector3D(interior_MAT[i][0], interior_MAT[i][1], interior_MAT[i][2])) - radii[i];
            
             for (auto item : result_s) 
             {                                
@@ -1382,8 +1382,11 @@ namespace geoflow::nodes::mat {
 
         for (auto id : vec_result_id2) 
         {
-            if (id > pc.size())            
-                id = id - pc.size();            
+            if (id > pc.size()) 
+            {
+                id = id - pc.size();
+                //std::cout << "index out of range!" << std::endl;
+            }
             visible_pc.push_back(pc[id]);
         }
 
