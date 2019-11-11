@@ -336,4 +336,21 @@ namespace geoflow::nodes::cgal {
     }
     void process();
   };
+
+  class CGALTest :public Node 
+  {
+  public:
+      using Node::Node;
+      void init() 
+      {
+          add_input("points", typeid(PointCollection));
+          add_output("convex_points", typeid(PointCollection));
+          add_output("ground_points", typeid(PointCollection));
+          add_output("convex_seg", typeid(SegmentCollection));
+      }
+
+      void gui() {
+      }
+      void process();
+  };
 }

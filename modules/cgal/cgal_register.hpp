@@ -22,6 +22,7 @@ namespace geoflow::nodes::cgal {
     R->register_node<LineHeightNode>("LineHeight");
     R->register_node<LineHeightCDTNode>("LineHeightCDT");
     R->register_node<SimplifyLinesBufferNode>("SimplifyLinesBuffer");
+    R->register_node<CGALTest>("CGALTest");
     return R;
   }
 }

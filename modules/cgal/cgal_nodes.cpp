@@ -45,11 +45,18 @@
 #include <CGAL/Orthogonal_k_neighbor_search.h>
 #include <CGAL/Search_traits_2.h>
 
+// convex hull
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/convex_hull_2.h>
+
 namespace geoflow::nodes::cgal {
 typedef tinsimp::K    K;
 typedef tinsimp::Gt   Gt;
 typedef tinsimp::Itag Itag;
 typedef CDT::Point    Point;
+
+
+//---------------------------//
 
 template<typename T> inline std::array<float,3> to_arr3f(T& p) {
   return {float(p.x()), float(p.y()), float(p.z())};
@@ -1109,4 +1116,78 @@ void SimplifyLinesBufferNode::process() {
   }
   output("polygons_simp").set(polygonssimp);
 }
+
+void CGALTest::process() 
+{
+
+    typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+    typedef K::Point_2 Point_2;
+    typedef std::vector<Point_2> Points;
+
+    auto pc = input("points").get<PointCollection>();
+    PointCollection ground_PC;    
+    PointCollection convex_pc;
+    SegmentCollection convex_seg;
+    
+    float min_z = 9999999;
+
+    for (int i = 0; i < pc.size(); i++) 
+    {
+        if (pc[i][2] < min_z) 
+        {
+            min_z = pc[i][2];
+        }
+    }
+
+    Points pts, result; // for convex hull
+
+    for (int i = 0; i < pc.size(); i++) 
+    {
+        ground_PC.push_back({ pc[i][0],pc[i][1],min_z });   
+        pts.push_back(Point_2(pc[i][0],pc[i][1]));
+    }
+
+    std::cout << "min z value of input PC:"<< min_z << std::endl;
+
+    CGAL::convex_hull_2(pts.begin(), pts.end(), std::back_inserter(result));
+    std::cout << result.size() << " points on the convex hull" << std::endl;
+
+        
+    for (int i=0;i<result.size();i++) 
+    {
+        convex_pc.push_back({ float(result[i][0]), float(result[i][1]),min_z });
+        
+ 
+    }
+
+    for (int i = 0; i < result.size(); i++) {
+        arr3f p1;
+        arr3f p2;
+
+        p1[0] = float(result[i][0]);
+        p1[1] = float(result[i][1]);
+        p1[2] = min_z;
+
+        p2[0] = float(result[i + 1][0]);
+        p2[1] = float(result[i + 1][1]);
+        p2[2] = min_z;
+
+        if (i == result.size() - 1) {
+            p2[0] = float(result[0][0]);
+            p2[1] = float(result[0][1]);
+            p2[2] = min_z;
+        }                    
+                
+        convex_seg.push_back({p1,p2});
+    }
+            
+    output("ground_points").set(ground_PC);
+    output("convex_points").set(convex_pc);
+    output("convex_seg").set(convex_seg);
+
+}
+
+
+
+
 }

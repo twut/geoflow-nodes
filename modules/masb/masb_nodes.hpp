@@ -14,6 +14,9 @@
 #include <boost/geometry/geometries/point.hpp>
 #include <boost/geometry/geometries/box.hpp>
 #include <boost/geometry/geometries/segment.hpp>
+//----------------CGAL-------------//
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/convex_hull_2.h>
 
 
 # define M_PI           3.14159265358979323846 
@@ -1093,7 +1096,7 @@ namespace geoflow::nodes::mat {
 
           //// 10
           //// [11][21]
-          geoflow::Triangle t1,t2;
+          //geoflow::Triangle t1,t2;
           geoflow::TriangleCollection tc;
           int Density = 10;
           std::array<float, 3> points[11][21];
@@ -1983,5 +1986,5 @@ namespace geoflow::nodes::mat {
 
   };
 
-
+  
 }
